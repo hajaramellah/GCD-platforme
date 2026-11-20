@@ -11,6 +11,7 @@ import { Catalog } from './pages/public/Catalog';
 import { Login } from './pages/public/Login';
 import { Register } from './pages/public/Register';
 import { FaqHelp } from './pages/public/FaqHelp';
+import { DevDemoProfiles } from './pages/public/DevDemoProfiles';
 
 // Candidat pages
 import { CandidateDashboard } from './pages/candidate/CandidateDashboard';
@@ -116,6 +117,7 @@ export function App() {
             <Route path="/sujets" element={<Catalog />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/dev/simulation-profils" element={<DevDemoProfiles />} />
             <Route path="/activation" element={<Navigate to="/login" replace />} />
             <Route path="/mot-de-passe-oublie" element={<Navigate to="/login" replace />} />
             <Route path="/faq-aide" element={<FaqHelp />} />

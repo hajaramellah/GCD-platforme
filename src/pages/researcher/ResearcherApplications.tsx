@@ -1,17 +1,12 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Eye,
-  FileText,
-  Search,
-  Filter,
-  CheckCircle2,
-  Award,
   Layers,
-  ArrowRight,
   X,
-  Download
+  Download,
+  AlertTriangle,
+  CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../services/storageService';
@@ -22,16 +17,116 @@ import {
   downloadProtectedDocument,
   ViewableDocumentInput
 } from '../../services/documentService';
+import { summarizeApplicationDocuments } from '../../utils/documentRequirements';
 
 export const ResearcherApplications: React.FC = () => {
   const { currentUser, currentRole, sessionToken } = useAuth();
-  const applications = storageService.getApplications();
+  const [applications, setApplications] = useState<CandidateApplication[]>(() =>
+    storageService.getApplications()
+  );
   const subjects = storageService.getSubjects();
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
   const [comparingApps, setComparingApps] = useState<CandidateApplication[]>([]);
   const [inspectApp, setInspectApp] = useState<CandidateApplication | null>(null);
   const [previewDoc, setPreviewDoc] = useState<ViewableDocumentInput | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncFromBackend = async () => {
+      try {
+        const res = await fetch('/api/applications', {
+          headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : undefined,
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data?.success || !Array.isArray(data.applications)) return;
+
+        const localApps = storageService.getApplications();
+        const localMap = new Map(localApps.map((a) => [a.id, a]));
+        const allSubjects = storageService.getSubjects();
+        const users = storageService.getUsers();
+        let hasUpdates = false;
+
+        for (const srvApp of data.applications as Partial<CandidateApplication>[]) {
+          if (!srvApp.id) continue;
+          const local = localMap.get(srvApp.id);
+          const subject = allSubjects.find((s) => s.id === (srvApp.subjectId || local?.subjectId));
+          const candidate = users.find((u) => u.id === (srvApp.candidateId || local?.candidateId));
+
+          if (!local) {
+            const hydrated: CandidateApplication = {
+              referenceNumber: srvApp.referenceNumber || `USMBA-DOC-${srvApp.id}`,
+              candidateId: srvApp.candidateId || candidate?.id || '',
+              candidateName:
+                srvApp.candidateName ||
+                (candidate ? `${candidate.firstName} ${candidate.lastName}` : srvApp.candidateEmail || 'Candidat'),
+              candidateEmail: srvApp.candidateEmail || candidate?.email || '',
+              candidatePhone: srvApp.candidatePhone || candidate?.phone || '',
+              cin: srvApp.cin || candidate?.cin || '',
+              cne: srvApp.cne || candidate?.cne || '',
+              studentOriginType: srvApp.studentOriginType || candidate?.studentOriginType || 'interne_usmba',
+              masterOriginUniversity: srvApp.masterOriginUniversity || candidate?.originEstablishment || 'USMBA Fès',
+              masterSpecialty: srvApp.masterSpecialty || candidate?.masterSpecialty || 'Master',
+              masterGraduationYear: Number(srvApp.masterGraduationYear) || 2026,
+              masterMention: srvApp.masterMention || 'Bien',
+              subjectId: srvApp.subjectId || '',
+              subjectTitle: srvApp.subjectTitle || subject?.title || 'Sujet doctoral',
+              laboratoryId: srvApp.laboratoryId || subject?.laboratoryId || 'lisac',
+              establishmentId: srvApp.establishmentId || subject?.establishmentId || 'fsdm',
+              discipline: srvApp.discipline || subject?.discipline || 'Informatique',
+              supervisorName: srvApp.supervisorName || subject?.supervisorName || 'À désigner',
+              status: (srvApp.status as CandidateApplication['status']) || 'soumise',
+              documents: Array.isArray(srvApp.documents) ? srvApp.documents : [],
+              correctionRequests: Array.isArray(srvApp.correctionRequests) ? srvApp.correctionRequests : [],
+              statusHistory: Array.isArray(srvApp.statusHistory) ? srvApp.statusHistory : [],
+              submittedAt: srvApp.submittedAt || new Date().toISOString(),
+              updatedAt: srvApp.updatedAt || new Date().toISOString(),
+              ...srvApp,
+              id: srvApp.id,
+            };
+            storageService.saveApplication(hydrated, {
+              id: currentUser?.id || 'chercheur',
+              name: `${currentUser?.firstName || 'Chercheur'} ${currentUser?.lastName || ''}`.trim(),
+              role: currentRole || 'enseignant_chercheur',
+            });
+            hasUpdates = true;
+          } else if (
+            srvApp.updatedAt &&
+            (!local.updatedAt || new Date(srvApp.updatedAt).getTime() > new Date(local.updatedAt).getTime())
+          ) {
+            const merged: CandidateApplication = {
+              ...local,
+              ...srvApp,
+              candidateName: srvApp.candidateName || local.candidateName,
+              subjectTitle: srvApp.subjectTitle || local.subjectTitle,
+              masterSpecialty: srvApp.masterSpecialty || local.masterSpecialty,
+              masterOriginUniversity: srvApp.masterOriginUniversity || local.masterOriginUniversity,
+              masterMention: srvApp.masterMention || local.masterMention,
+              documents: Array.isArray(srvApp.documents) && srvApp.documents.length > 0 ? srvApp.documents : local.documents,
+            };
+            storageService.saveApplication(merged, {
+              id: currentUser?.id || 'chercheur',
+              name: `${currentUser?.firstName || 'Chercheur'} ${currentUser?.lastName || ''}`.trim(),
+              role: currentRole || 'enseignant_chercheur',
+            });
+            hasUpdates = true;
+          }
+        }
+
+        if (!cancelled && hasUpdates) {
+          setApplications(storageService.getApplications());
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    };
+    syncFromBackend();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken, currentUser?.id, currentRole]);
 
   const toAppViewableDoc = (
     app: CandidateApplication,
@@ -165,6 +260,7 @@ export const ResearcherApplications: React.FC = () => {
         <div className="space-y-3">
           {filteredApps.map((app) => {
             const isCompared = comparingApps.some((c) => c.id === app.id);
+            const docSummary = summarizeApplicationDocuments(app.documents);
             return (
               <div
                 key={app.id}
@@ -175,10 +271,21 @@ export const ResearcherApplications: React.FC = () => {
                 }`}
               >
                 <div className="space-y-1.5 max-w-xl">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-sm text-slate-900">{app.candidateName}</span>
                     <span className="font-mono text-xs text-slate-400">({app.referenceNumber})</span>
                     <StatusBadge status={app.status} size="sm" />
+                    {docSummary.hasIssues ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                        <AlertTriangle className="w-3 h-3" />
+                        {docSummary.providedRequiredCount}/{docSummary.totalRequired} pièces
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {docSummary.providedRequiredCount}/{docSummary.totalRequired} pièces
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-slate-600">
                     <strong>Master :</strong> {app.masterSpecialty} • Mention <span className="font-bold text-teal-800">{app.masterMention}</span> ({app.masterGraduationYear})
@@ -188,10 +295,10 @@ export const ResearcherApplications: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => toggleCompare(app)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors whitespace-nowrap shrink-0 ${
                       isCompared
                         ? 'bg-teal-600 text-white border-teal-600'
                         : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
@@ -202,7 +309,7 @@ export const ResearcherApplications: React.FC = () => {
 
                   <button
                     onClick={() => setInspectApp(app)}
-                    className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+                    className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>Dossier</span>
@@ -248,52 +355,90 @@ export const ResearcherApplications: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <h4 className="font-bold text-slate-900 mb-2">Pièces justificatives jointes</h4>
-                <div className="space-y-2">
-                  {inspectApp.documents.map((d) => (
-                    <div
-                      key={d.id}
-                      className="p-2.5 bg-slate-50 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                    >
-                      <div className="min-w-0">
-                        <span className="font-medium text-slate-800 block">{d.label}</span>
-                        <span className="text-[11px] font-mono text-slate-500">
-                          {d.fileName || 'Non fourni'}
-                        </span>
-                      </div>
-                      {(d.fileName || (d.fileUrl && d.fileUrl !== '#')) && (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewDoc(toAppViewableDoc(inspectApp, d))}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800 hover:text-teal-950 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shrink-0"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Consulter</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              downloadProtectedDocument(toAppViewableDoc(inspectApp, d), {
-                                sessionToken,
-                                currentUserId: currentUser?.id,
-                                currentUserEmail: currentUser?.email,
-                                currentUserCin: currentUser?.cin,
-                                activeRole: currentRole,
-                              }).catch(() => undefined)
-                            }
-                            className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition-colors whitespace-nowrap shrink-0"
-                            title="Télécharger une copie (action secondaire)"
-                          >
-                            <Download className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
+              {(() => {
+                const modalSummary = summarizeApplicationDocuments(inspectApp.documents);
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-bold text-slate-900">
+                        Pièces justificatives ({modalSummary.providedRequiredCount}/{modalSummary.totalRequired} fournies)
+                      </h4>
+                      <span className="text-[11px] text-slate-500">
+                        {modalSummary.validatedRequiredCount} validée(s)
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      {inspectApp.documents.map((d) => {
+                        const badgeClass =
+                          d.status === 'valide'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : d.status === 'rejete' || d.status === 'manquant'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : d.status === 'complement_requis'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200';
+                        const badgeLabel =
+                          d.status === 'valide'
+                            ? 'Validée'
+                            : d.status === 'rejete'
+                            ? 'Rejetée'
+                            : d.status === 'manquant'
+                            ? 'Manquante'
+                            : d.status === 'complement_requis'
+                            ? 'Complément requis'
+                            : 'En attente';
+
+                        return (
+                          <div
+                            key={d.id}
+                            className="p-2.5 bg-slate-50 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium text-slate-800">{d.label}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${badgeClass}`}>
+                                  {badgeLabel}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-mono text-slate-500 block">
+                                {d.fileName || 'Non fourni'}
+                              </span>
+                            </div>
+                            {(d.fileName || (d.fileUrl && d.fileUrl !== '#')) && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDoc(toAppViewableDoc(inspectApp, d))}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800 hover:text-teal-950 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>Consulter</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    downloadProtectedDocument(toAppViewableDoc(inspectApp, d), {
+                                      sessionToken,
+                                      currentUserId: currentUser?.id,
+                                      currentUserEmail: currentUser?.email,
+                                      currentUserCin: currentUser?.cin,
+                                      activeRole: currentRole,
+                                    }).catch(() => undefined)
+                                  }
+                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                                  title="Télécharger une copie (action secondaire)"
+                                >
+                                  <Download className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="p-4 bg-slate-50 border-t flex justify-end">

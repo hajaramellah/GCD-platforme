@@ -10,13 +10,17 @@ import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../services/storageService';
 import { ApplicationDocument, CorrectionRequest } from '../../types';
 import { DocumentUploader } from '../../components/common/DocumentUploader';
+import {
+  isCommonDocumentType,
+  isDocumentProvided,
+  summarizeApplicationDocuments
+} from '../../utils/documentRequirements';
 
 export const CandidateCorrectionWorkspace: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, sessionToken, refreshUserData } = useAuth();
   const [searchParams] = useSearchParams();
   const queryAppId = searchParams.get('appId');
 
-  // Strict Candidate Application Isolation — all applications belonging to candidate
   const myApps = useMemo(
     () =>
       storageService.getCandidateApplicationsStrict(
@@ -33,9 +37,7 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
         (a) =>
           a.status === 'correction_demandee' ||
           a.status === 'incomplete' ||
-          a.documents?.some(
-            (d) => d.status === 'rejete' || d.status === 'complement_requis' || d.status === 'manquant'
-          )
+          summarizeApplicationDocuments(a.documents).hasIssues
       ),
     [myApps]
   );
@@ -43,6 +45,14 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
   const [selectedAppId, setSelectedAppId] = useState<string>(
     queryAppId || correctionApps[0]?.id || ''
   );
+
+  useEffect(() => {
+    if (queryAppId && correctionApps.some((a) => a.id === queryAppId)) {
+      setSelectedAppId(queryAppId);
+    } else if (!correctionApps.some((a) => a.id === selectedAppId)) {
+      setSelectedAppId(correctionApps[0]?.id || '');
+    }
+  }, [queryAppId, currentUser?.id, correctionApps]);
 
   const app = correctionApps.find((a) => a.id === selectedAppId) || correctionApps[0];
 
@@ -53,7 +63,9 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
     requestedAt: app?.updatedAt || new Date().toISOString(),
     deadline: '2026-11-25T23:59:59Z',
     comment:
-      'Des pièces justificatives ont été signalées comme non conformes ou nécessitant un complément par l\'administration.',
+      app?.status === 'incomplete'
+        ? 'Des pièces obligatoires sont manquantes sur ce dossier. Veuillez les téléverser pour finaliser votre candidature.'
+        : 'Des pièces justificatives ont été signalées comme non conformes ou nécessitant un complément par l\'administration.',
     missingOrInvalidDocs: [],
     isResolved: false
   };
@@ -66,24 +78,35 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
     setIsResubmitted(false);
   }, [app?.id]);
 
-  const handleDocumentUpload = (docId: string, file: { fileName: string; fileSize: number; fileUrl: string }) => {
+  const handleDocumentUpload = (
+    docId: string,
+    file: { fileName: string; fileSize: number; fileUrl: string }
+  ) => {
+    let uploadedDoc: ApplicationDocument | null = null;
     setDocuments((prev) =>
-      prev.map((d) =>
-        d.id === docId
-          ? {
-              ...d,
-              fileName: file.fileName,
-              fileSize: file.fileSize,
-              fileUrl: file.fileUrl,
-              status: 'en_attente',
-              provenance: 'fourni_candidat',
-              isDemoApogee: false,
-              rejectionReason: undefined,
-              uploadedAt: new Date().toISOString()
-            }
-          : d
-      )
+      prev.map((d) => {
+        if (d.id !== docId) return d;
+        uploadedDoc = {
+          ...d,
+          fileName: file.fileName,
+          fileSize: file.fileSize,
+          fileUrl: file.fileUrl,
+          status: 'en_attente',
+          provenance: 'fourni_candidat',
+          isDemoApogee: false,
+          rejectionReason: undefined,
+          uploadedAt: new Date().toISOString()
+        };
+        return uploadedDoc;
+      })
     );
+
+    if (currentUser && uploadedDoc && isCommonDocumentType((uploadedDoc as ApplicationDocument).type)) {
+      storageService.saveCandidateSharedDocument(currentUser.id, uploadedDoc, {
+        syncPendingApps: false
+      });
+      refreshUserData();
+    }
   };
 
   const docsToFix = documents.filter(
@@ -91,27 +114,53 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
       latestRequest.missingOrInvalidDocs.includes(d.type) ||
       d.status === 'rejete' ||
       d.status === 'complement_requis' ||
-      d.status === 'manquant'
+      d.status === 'manquant' ||
+      !d.fileName
   );
 
-  const handleResubmit = () => {
+  const docSummary = summarizeApplicationDocuments(documents);
+
+  const handleResubmit = async () => {
     if (!app) return;
 
     const updatedDocs = documents.map((d) =>
-      d.status === 'rejete' || d.status === 'complement_requis' || d.status === 'manquant'
+      (d.status === 'rejete' || d.status === 'complement_requis' || d.status === 'manquant') &&
+      isDocumentProvided({ status: 'en_attente', fileName: d.fileName })
         ? { ...d, status: 'en_attente' as const }
+        : !d.fileName
+        ? { ...d, status: 'manquant' as const }
         : d
     );
 
+    const postSummary = summarizeApplicationDocuments(updatedDocs);
+    const nextStatus = postSummary.isComplete
+      ? app.status === 'incomplete'
+        ? ('soumise' as const)
+        : ('corrigee' as const)
+      : app.status === 'correction_demandee' &&
+        postSummary.rejectedDocs.length === 0 &&
+        postSummary.complementDocs.length === 0
+      ? ('incomplete' as const)
+      : app.status;
+
+    const updatedRequests = postSummary.isComplete
+      ? app.correctionRequests.map((cr) =>
+          !cr.isResolved ? { ...cr, isResolved: true, resolvedAt: new Date().toISOString() } : cr
+        )
+      : app.correctionRequests;
+
     const updatedApp = {
       ...app,
-      status: 'corrigee' as const,
+      status: nextStatus,
       documents: updatedDocs,
+      correctionRequests: updatedRequests,
       statusHistory: [
         {
           id: `sh-${Date.now()}`,
-          status: 'corrigee' as const,
-          comment: 'Pièces rectifiées et complétées soumises par le candidat.',
+          status: nextStatus,
+          comment: postSummary.isComplete
+            ? 'Pièces rectifiées et complétées soumises par le candidat.'
+            : `Mise à jour partielle (${postSummary.providedRequiredCount}/${postSummary.totalRequired} pièces fournies).`,
           changedBy: `${currentUser?.firstName} ${currentUser?.lastName}`,
           timestamp: new Date().toISOString()
         },
@@ -126,10 +175,36 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
       role: 'candidat'
     });
 
+    // Also persist common docs into vault & sync backend
+    if (currentUser) {
+      for (const doc of updatedDocs) {
+        if (isCommonDocumentType(doc.type) && isDocumentProvided(doc)) {
+          storageService.saveCandidateSharedDocument(currentUser.id, doc, {
+            syncPendingApps: false
+          });
+        }
+      }
+      refreshUserData();
+    }
+
+    try {
+      await fetch(`/api/applications/${app.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {})
+        },
+        credentials: 'include',
+        body: JSON.stringify(updatedApp)
+      });
+    } catch {
+      // Offline fallback remains persisted
+    }
+
     storageService.addNotification({
       targetRole: 'administration',
       title: `Régularisation effectuée — Réf ${app.referenceNumber}`,
-      message: `Le candidat ${app.candidateName} a téléversé les pièces rectifiées demandées.`,
+      message: `Le candidat ${app.candidateName} a mis à jour les pièces demandées.`,
       category: 'candidature',
       link: '/administration/dossiers'
     });
@@ -145,7 +220,7 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
         </div>
         <h3 className="text-base font-bold text-slate-800">Aucune demande de régularisation en attente</h3>
         <p className="text-xs text-slate-500 max-w-sm mx-auto">
-          Vos dossiers ne présentent aucune demande de correction active. Vous pouvez suivre l&apos;avancement dans votre espace candidat.
+          Vos dossiers ne présentent aucune pièce manquante ou rejetée. Suivez leur avancement dans votre espace candidat.
         </p>
         <Link
           to="/candidat/dashboard"
@@ -163,13 +238,13 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
       <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-slate-900 rounded-3xl p-8 text-white shadow-xl space-y-3">
         <div className="inline-flex items-center gap-2 bg-rose-500/20 border border-rose-400/40 px-3 py-1 rounded-full text-rose-300 text-xs font-semibold">
           <AlertTriangle className="w-3.5 h-3.5" />
-          Régularisation Officielle de Dossier
+          Régularisation &amp; Complément de Dossier
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight">
-          Régularisation & Complément de Candidature
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          Compléter ou Corriger mon Dossier
         </h1>
         <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-          Consultez les motifs formulés par le service d&apos;instruction administrative et remplacez les pièces demandées avant la date limite.
+          Consultez les motifs formulés sur vos pièces rejetées ou manquantes et téléversez les justificatifs attendus. Les pièces communes sont également enregistrées dans votre coffre personnel.
         </p>
       </div>
 
@@ -199,10 +274,12 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
             <CheckCircle2 className="w-7 h-7" />
           </div>
           <h2 className="text-lg font-bold text-emerald-950">
-            Dossier régularisé et transmis à l&apos;administration !
+            Modifications enregistrées sur le dossier {app.referenceNumber} !
           </h2>
           <p className="text-xs text-emerald-700 max-w-md mx-auto leading-relaxed">
-            Vos pièces rectifiées ont été enregistrées avec succès. Le statut de votre candidature est passé à <strong>« Régularisé / Corrigé »</strong>.
+            {docSummary.isComplete
+              ? 'Toutes les pièces requises sont désormais complètes. Votre dossier est transmis pour vérification.'
+              : `${docSummary.providedRequiredCount} / ${docSummary.totalRequired} pièces sont fournies. Vous pouvez terminer les pièces restantes à tout moment.`}
           </p>
           <div className="pt-2">
             <Link
@@ -225,7 +302,7 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
                 </span>
                 <span className="text-xs text-slate-500">• {app.subjectTitle}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 px-3 py-1 rounded-full border border-rose-200 shrink-0">
                 <Clock className="w-3.5 h-3.5" />
                 <span>Date limite : {new Date(latestRequest.deadline).toLocaleDateString('fr-FR')}</span>
               </div>
@@ -233,7 +310,7 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
 
             <div className="p-4 bg-rose-50/60 rounded-2xl border border-rose-200 space-y-2">
               <span className="text-xs font-bold uppercase tracking-wider text-rose-900 block">
-                Motif communiqué par l&apos;Administration :
+                Observation administrative :
               </span>
               <p className="text-xs text-rose-900 leading-relaxed font-medium">
                 « {latestRequest.comment} »
@@ -243,23 +320,45 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
 
           {/* Replacement uploads */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-6 shadow-xs">
-            <h2 className="text-base font-bold text-slate-900">
-              Pièces à régulariser ({docsToFix.length})
-            </h2>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h2 className="text-base font-bold text-slate-900">
+                Pièces à régulariser ou compléter ({docsToFix.length})
+              </h2>
+              <span className="text-xs font-semibold text-slate-500">
+                {docSummary.providedRequiredCount} / {docSummary.totalRequired} pièces prêtes
+              </span>
+            </div>
 
             <div className="space-y-4">
               {docsToFix.map((doc) => (
                 <div key={doc.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900">{doc.label}</span>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-xs text-slate-900">{doc.label}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                          isCommonDocumentType(doc.type)
+                            ? 'bg-teal-50 text-teal-800 border-teal-200'
+                            : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                        }`}
+                      >
+                        {isCommonDocumentType(doc.type) ? 'Pièce commune' : 'Spécifique sujet'}
+                      </span>
+                    </div>
                     <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
                       {doc.status === 'rejete'
                         ? 'Rejeté'
                         : doc.status === 'complement_requis'
                         ? 'Complément requis'
-                        : 'À fournir / remplacer'}
+                        : 'Pièce manquante'}
                     </span>
                   </div>
+
+                  {doc.rejectionReason && (
+                    <div className="text-xs text-rose-800 bg-rose-100/70 px-3 py-2 rounded-xl border border-rose-200">
+                      <strong>Motif du rejet :</strong> {doc.rejectionReason}
+                    </div>
+                  )}
 
                   <DocumentUploader
                     document={doc}
@@ -280,9 +379,13 @@ export const CandidateCorrectionWorkspace: React.FC = () => {
               <button
                 type="button"
                 onClick={handleResubmit}
-                className="inline-flex items-center gap-2 bg-rose-700 hover:bg-rose-800 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-colors shadow-xs"
+                className="inline-flex items-center gap-2 bg-rose-700 hover:bg-rose-800 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-colors shadow-xs cursor-pointer"
               >
-                <span>Transmettre mon dossier rectifié</span>
+                <span>
+                  {docSummary.isComplete
+                    ? 'Transmettre mon dossier complété'
+                    : 'Enregistrer les pièces ajoutées'}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

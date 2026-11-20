@@ -60,6 +60,7 @@ export const DoctoralPathTimeline: React.FC<DoctoralPathTimelineProps> = ({
   const isAdmitted = status === 'admise';
   const isWaitingList = status === 'liste_attente';
   const isRejected = status === 'non_admise';
+  const appQuery = application?.id ? `?appId=${encodeURIComponent(application.id)}` : '';
 
   const stages: TimelineStage[] = [
     {
@@ -102,7 +103,7 @@ export const DoctoralPathTimeline: React.FC<DoctoralPathTimelineProps> = ({
         ? 'En cours d\'instruction'
         : 'En attente',
       actionText: isCorrectionNeeded ? 'Régulariser les pièces' : undefined,
-      actionLink: isCorrectionNeeded ? '/candidat/corrections' : undefined,
+      actionLink: isCorrectionNeeded ? `/candidat/corrections${appQuery}` : undefined,
       rejectionReason: isCorrectionNeeded ? 'Certaines pièces sont manquantes ou non conformes.' : undefined
     },
     {
@@ -133,7 +134,7 @@ export const DoctoralPathTimeline: React.FC<DoctoralPathTimelineProps> = ({
         ? 'Convoqué'
         : 'En attente',
       actionText: status === 'entretien_programme' ? 'Voir ma convocation' : undefined,
-      actionLink: status === 'entretien_programme' ? '/candidat/convocation' : undefined
+      actionLink: status === 'entretien_programme' ? `/candidat/convocation${appQuery}` : undefined
     },
     {
       id: 'stage-6',
@@ -155,7 +156,7 @@ export const DoctoralPathTimeline: React.FC<DoctoralPathTimelineProps> = ({
         ? 'Non retenu'
         : 'En attente de délibération',
       actionText: isAdmitted || isWaitingList || isRejected ? 'Consulter le PV officiel' : undefined,
-      actionLink: isAdmitted || isWaitingList || isRejected ? '/candidat/resultats' : undefined,
+      actionLink: isAdmitted || isWaitingList || isRejected ? `/candidat/resultats${appQuery}` : undefined,
       rejectionReason: isRejected ? 'Dossier non retenu au regard du contingent et des notes de sélection.' : undefined
     },
     {
@@ -166,7 +167,7 @@ export const DoctoralPathTimeline: React.FC<DoctoralPathTimelineProps> = ({
       status: isAdmitted ? 'en_cours' : 'en_attente',
       statusLabel: isAdmitted ? 'À finaliser' : 'En attente d\'admission',
       actionText: isAdmitted ? 'Dossier d\'inscription' : undefined,
-      actionLink: isAdmitted ? '/candidat/inscription-administrative' : undefined
+      actionLink: isAdmitted ? `/candidat/inscription-administrative${appQuery}` : undefined
     },
     {
       id: 'stage-8',
@@ -197,7 +198,7 @@ export const DoctoralPathTimeline: React.FC<DoctoralPathTimelineProps> = ({
         );
       case 'en_cours':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
             <Clock className="w-3.5 h-3.5 text-blue-600" />
             {stage.statusLabel}
           </span>

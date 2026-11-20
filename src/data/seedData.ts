@@ -120,9 +120,9 @@ export const LABORATORIES: Laboratory[] = [
 export const DEMO_USERS: User[] = [
   {
     id: 'usr-candidat-1',
-    email: 'hajar.amellah@usmba.ac.ma',
-    firstName: 'Hajar',
-    lastName: 'Amellah',
+    email: 'kenza.benali@usmba.ac.ma',
+    firstName: 'Kenza',
+    lastName: 'Benali',
     cin: 'CD654321',
     cne: 'N134098765',
     phone: '+212 6 61 23 45 67',
@@ -137,22 +137,291 @@ export const DEMO_USERS: User[] = [
     academicYear: '2025-2026',
     sharedDocuments: [
       {
-        id: 'shared-cin-1',
+        id: 'vault-c1-cin',
         type: 'cin',
         label: "Carte d'Identité Nationale (CIN)",
-        fileName: 'CIN_CD654321_Hajar_Amellah_Demo.pdf',
+        fileName: 'CIN_CD654321_Kenza_Benali.pdf',
         fileSize: 185000,
         fileUrl: '/api/applications/app-001/documents/doc-1/content',
         isRequired: true,
         status: 'valide',
         provenance: 'fourni_candidat',
         uploadedAt: '2026-09-15T08:30:00Z'
+      },
+      {
+        id: 'vault-c1-bac',
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'APOGEE_DEMO_Baccalaureat_N134098765.pdf',
+        fileSize: 210000,
+        fileUrl: '/api/applications/app-001/documents/doc-2/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-15T08:31:00Z'
+      },
+      {
+        id: 'vault-c1-lic',
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'APOGEE_DEMO_Licence_SMI_N134098765.pdf',
+        fileSize: 245000,
+        fileUrl: '/api/applications/app-001/documents/doc-3/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-15T08:32:00Z'
+      },
+      {
+        id: 'vault-c1-mas',
+        type: 'master',
+        label: "Diplôme de Master ou Attestation de Réussite",
+        fileName: 'APOGEE_DEMO_Attestation_Master_IDSI.pdf',
+        fileSize: 268000,
+        fileUrl: '/api/applications/app-001/documents/doc-4/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-15T08:33:00Z'
+      },
+      {
+        id: 'vault-c1-rel',
+        type: 'releves_notes',
+        label: "Relevés de notes de l'ensemble du cursus (S1 à S4)",
+        fileName: 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf',
+        fileSize: 312000,
+        fileUrl: '/api/applications/app-001/documents/doc-5/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-15T08:34:00Z'
+      },
+      {
+        id: 'vault-c1-cv',
+        type: 'cv',
+        label: 'Curriculum Vitae détaillé',
+        fileName: 'CV_Kenza_Benali_2026.pdf',
+        fileSize: 164000,
+        fileUrl: '/api/applications/app-001/documents/doc-6/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-15T08:35:00Z'
+      },
+      {
+        id: 'vault-c1-ant',
+        type: 'attestation_non_travail',
+        label: 'Attestation de non travail ou autorisation employeur',
+        fileName: 'Attestation_Non_Travail_Kenza.pdf',
+        fileSize: 132000,
+        fileUrl: '/api/applications/app-001/documents/doc-9/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-15T08:36:00Z'
       }
     ],
     createdAt: '2026-09-15T08:30:00Z'
   },
   {
-    id: 'usr-candidat-externe',
+    id: 'usr-candidat-2',
+    email: 'youssef.berrada@usmba.ac.ma',
+    firstName: 'Youssef',
+    lastName: 'Berrada',
+    cin: 'CD712390',
+    cne: 'N138129845',
+    phone: '+212 6 70 88 99 00',
+    establishmentId: 'ensa',
+    roles: ['candidat'],
+    currentRole: 'candidat',
+    isActive: true,
+    isEmailVerified: true,
+    studentOriginType: 'interne_usmba',
+    originEstablishment: 'École Nationale des Sciences Appliquées de Fès (USMBA)',
+    masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
+    academicYear: '2025-2026',
+    sharedDocuments: [
+      {
+        id: 'vault-c2-cin',
+        type: 'cin',
+        label: "Carte d'Identité Nationale (CIN)",
+        fileName: 'CIN_CD712390_Youssef_Berrada.pdf',
+        fileSize: 185000,
+        fileUrl: '/api/applications/app-002/documents/doc-21/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-22T15:50:00Z'
+      },
+      {
+        id: 'vault-c2-bac',
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'APOGEE_DEMO_Bac_N138129845.pdf',
+        fileSize: 190000,
+        fileUrl: '/api/applications/app-002/documents/doc-22/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-22T15:51:00Z'
+      },
+      {
+        id: 'vault-c2-lic',
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'APOGEE_DEMO_Licence_N138129845.pdf',
+        fileSize: 220000,
+        fileUrl: '/api/applications/app-002/documents/doc-23/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-22T15:52:00Z'
+      },
+      {
+        id: 'vault-c2-mas',
+        type: 'master',
+        label: "Diplôme de Master ou Attestation de Réussite",
+        fileName: 'Master_Youssef_Berrada_ENSA.pdf',
+        fileSize: 242000,
+        fileUrl: '/api/applications/app-002/documents/doc-24/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-22T15:53:00Z'
+      },
+      {
+        id: 'vault-c2-rel',
+        type: 'releves_notes',
+        label: "Relevés de notes de l'ensemble du cursus (S1 à S4)",
+        fileName: 'Releves_Youssef_Berrada_S1_S4.pdf',
+        fileSize: 265000,
+        fileUrl: '/api/applications/app-002/documents/doc-25/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-22T15:54:00Z'
+      },
+      {
+        id: 'vault-c2-cv',
+        type: 'cv',
+        label: 'Curriculum Vitae détaillé',
+        fileName: 'CV_Youssef_Berrada.pdf',
+        fileSize: 140000,
+        fileUrl: '/api/applications/app-002/documents/doc-26/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-22T15:55:00Z'
+      }
+    ],
+    createdAt: '2026-09-20T10:15:00Z'
+  },
+  {
+    id: 'usr-candidat-3',
+    email: 'amine.tazi@usmba.ac.ma',
+    firstName: 'Amine',
+    lastName: 'Tazi',
+    cin: 'CD823451',
+    cne: 'N139445566',
+    phone: '+212 6 68 12 34 90',
+    establishmentId: 'fsdm',
+    roles: ['candidat'],
+    currentRole: 'candidat',
+    isActive: true,
+    isEmailVerified: true,
+    studentOriginType: 'interne_usmba',
+    originEstablishment: 'Faculté des Sciences Dhar El Mahraz (USMBA - Fès)',
+    masterSpecialty: 'Réseaux, Systèmes et Sécurité Informatique',
+    academicYear: '2025-2026',
+    sharedDocuments: [
+      {
+        id: 'vault-c3-cin',
+        type: 'cin',
+        label: "Carte d'Identité Nationale (CIN)",
+        fileName: 'CIN_CD823451_Amine_Tazi.pdf',
+        fileSize: 182000,
+        fileUrl: '/api/applications/app-003/documents/doc-31/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-23T09:00:00Z'
+      },
+      {
+        id: 'vault-c3-bac',
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'APOGEE_DEMO_Bac_N139445566.pdf',
+        fileSize: 195000,
+        fileUrl: '/api/applications/app-003/documents/doc-32/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-23T09:01:00Z'
+      },
+      {
+        id: 'vault-c3-lic',
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'APOGEE_DEMO_Licence_N139445566.pdf',
+        fileSize: 215000,
+        fileUrl: '/api/applications/app-003/documents/doc-33/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-23T09:02:00Z'
+      },
+      {
+        id: 'vault-c3-mas',
+        type: 'master',
+        label: "Diplôme de Master ou Attestation de Réussite",
+        fileName: 'APOGEE_DEMO_Master_N139445566.pdf',
+        fileSize: 235000,
+        fileUrl: '/api/applications/app-003/documents/doc-34/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-23T09:03:00Z'
+      },
+      {
+        id: 'vault-c3-cv',
+        type: 'cv',
+        label: 'Curriculum Vitae détaillé',
+        fileName: 'CV_Amine_Tazi.pdf',
+        fileSize: 148000,
+        fileUrl: '/api/applications/app-003/documents/doc-36/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-23T09:04:00Z'
+      },
+      {
+        id: 'vault-c3-ant',
+        type: 'attestation_non_travail',
+        label: 'Attestation de non travail',
+        fileName: 'Attestation_Non_Travail_Amine.pdf',
+        fileSize: 138000,
+        fileUrl: '/api/applications/app-003/documents/doc-39/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-23T09:05:00Z'
+      }
+    ],
+    createdAt: '2026-09-23T09:00:00Z'
+  },
+  {
+    id: 'usr-candidat-4',
     email: 'nadia.chraibi@usmba.ac.ma',
     firstName: 'Nadia',
     lastName: 'Chraibi',
@@ -170,19 +439,269 @@ export const DEMO_USERS: User[] = [
     academicYear: '2025-2026',
     sharedDocuments: [
       {
-        id: 'shared-cin-ext',
+        id: 'vault-c4-cin',
         type: 'cin',
         label: "Carte d'Identité Nationale (CIN)",
         fileName: 'CIN_BE849201_Nadia_Chraibi_Demo.pdf',
         fileSize: 192000,
-        fileUrl: '/api/applications/app-ext-001/documents/doc-ext-1/content',
+        fileUrl: '/api/applications/app-004/documents/doc-41/content',
         isRequired: true,
         status: 'en_attente',
         provenance: 'fourni_candidat',
-        uploadedAt: '2026-09-21T09:10:00Z'
+        uploadedAt: '2026-10-04T11:05:00Z'
+      },
+      {
+        id: 'vault-c4-bac',
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'Baccalaureat_Nadia_Chraibi_Demo.pdf',
+        fileSize: 215000,
+        fileUrl: '/api/applications/app-004/documents/doc-42/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-04T11:06:00Z'
+      },
+      {
+        id: 'vault-c4-lic',
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'Diplome_Licence_UH2C_Demo.pdf',
+        fileSize: 248000,
+        fileUrl: '/api/applications/app-004/documents/doc-43/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-04T11:07:00Z'
+      },
+      {
+        id: 'vault-c4-mas',
+        type: 'master',
+        label: "Diplôme de Master ou Diplôme d'Ingénieur",
+        fileName: 'Diplome_Master_UH2C_Chraibi_Demo.pdf',
+        fileSize: 286000,
+        fileUrl: '/api/applications/app-004/documents/doc-44/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-04T11:08:00Z'
+      },
+      {
+        id: 'vault-c4-rel',
+        type: 'releves_notes',
+        label: "Relevés de notes de l'ensemble du cursus (S1 à S4)",
+        fileName: 'Releves_Notes_S1_S4_UH2C_Demo.pdf',
+        fileSize: 334000,
+        fileUrl: '/api/applications/app-004/documents/doc-45/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-04T11:09:00Z'
+      },
+      {
+        id: 'vault-c4-cv',
+        type: 'cv',
+        label: 'Curriculum Vitae détaillé',
+        fileName: 'CV_Nadia_Chraibi_Demo.pdf',
+        fileSize: 174000,
+        fileUrl: '/api/applications/app-004/documents/doc-46/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-04T11:10:00Z'
+      },
+      {
+        id: 'vault-c4-ant',
+        type: 'attestation_non_travail',
+        label: "Attestation de non travail ou autorisation de l'employeur",
+        fileName: 'Attestation_Non_Travail_Chraibi_Demo.pdf',
+        fileSize: 141000,
+        fileUrl: '/api/applications/app-004/documents/doc-49/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-04T11:13:00Z'
       }
     ],
     createdAt: '2026-09-21T09:00:00Z'
+  },
+  {
+    id: 'usr-candidat-5',
+    email: 'tarik.elmansouri@usmba.ac.ma',
+    firstName: 'Tarik',
+    lastName: 'El Mansouri',
+    cin: 'AE519204',
+    cne: 'M142087612',
+    phone: '+212 6 63 22 44 88',
+    establishmentId: 'fsdm',
+    roles: ['candidat'],
+    currentRole: 'candidat',
+    isActive: true,
+    isEmailVerified: true,
+    studentOriginType: 'externe',
+    originEstablishment: 'Université Cadi Ayyad de Marrakech — Faculté des Sciences Semlalia',
+    masterSpecialty: 'Master Systèmes Intelligents & Énergie',
+    academicYear: '2025-2026',
+    sharedDocuments: [
+      {
+        id: 'vault-c5-cin',
+        type: 'cin',
+        label: "Carte d'Identité Nationale (CIN)",
+        fileName: 'CIN_AE519204_Tarik_ElMansouri.pdf',
+        fileSize: 176000,
+        fileUrl: '/api/applications/app-005/documents/doc-51/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-05T10:00:00Z'
+      },
+      {
+        id: 'vault-c5-bac',
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'Baccalaureat_Tarik_ElMansouri.pdf',
+        fileSize: 205000,
+        fileUrl: '/api/applications/app-005/documents/doc-52/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-05T10:02:00Z'
+      },
+      {
+        id: 'vault-c5-lic',
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'Licence_UCA_Tarik_ElMansouri.pdf',
+        fileSize: 229000,
+        fileUrl: '/api/applications/app-005/documents/doc-53/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-05T10:03:00Z'
+      },
+      {
+        id: 'vault-c5-cv',
+        type: 'cv',
+        label: 'Curriculum Vitae détaillé',
+        fileName: 'CV_Tarik_ElMansouri.pdf',
+        fileSize: 151000,
+        fileUrl: '/api/applications/app-005/documents/doc-56/content',
+        isRequired: true,
+        status: 'en_attente',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-10-05T10:05:00Z'
+      }
+    ],
+    createdAt: '2026-10-05T10:00:00Z'
+  },
+  {
+    id: 'usr-candidat-6',
+    email: 'imane.bennani@usmba.ac.ma',
+    firstName: 'Imane',
+    lastName: 'Bennani',
+    cin: 'CD781234',
+    cne: 'N136778899',
+    phone: '+212 6 69 77 88 11',
+    establishmentId: 'fsdm',
+    roles: ['candidat'],
+    currentRole: 'candidat',
+    isActive: true,
+    isEmailVerified: true,
+    studentOriginType: 'interne_usmba',
+    originEstablishment: 'Faculté des Sciences Dhar El Mahraz (USMBA - Fès)',
+    masterSpecialty: 'Master Science des Données et Systèmes Intelligents',
+    academicYear: '2025-2026',
+    sharedDocuments: [
+      {
+        id: 'vault-c6-cin',
+        type: 'cin',
+        label: "Carte d'Identité Nationale (CIN)",
+        fileName: 'CIN_CD781234_Imane_Bennani.pdf',
+        fileSize: 184000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-1/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-24T11:00:00Z'
+      },
+      {
+        id: 'vault-c6-bac',
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'APOGEE_DEMO_Bac_N136778899.pdf',
+        fileSize: 204000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-2/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-24T11:01:00Z'
+      },
+      {
+        id: 'vault-c6-lic',
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'APOGEE_DEMO_Licence_N136778899.pdf',
+        fileSize: 238000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-3/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-24T11:02:00Z'
+      },
+      {
+        id: 'vault-c6-mas',
+        type: 'master',
+        label: "Diplôme de Master ou Attestation de Réussite",
+        fileName: 'APOGEE_DEMO_Master_N136778899.pdf',
+        fileSize: 262000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-4/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-24T11:03:00Z'
+      },
+      {
+        id: 'vault-c6-rel',
+        type: 'releves_notes',
+        label: "Relevés de notes de l'ensemble du cursus (S1 à S4)",
+        fileName: 'APOGEE_DEMO_Releves_N136778899.pdf',
+        fileSize: 304000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-5/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+        uploadedAt: '2026-09-24T11:04:00Z'
+      },
+      {
+        id: 'vault-c6-cv',
+        type: 'cv',
+        label: 'Curriculum Vitae détaillé',
+        fileName: 'CV_Imane_Bennani_2026.pdf',
+        fileSize: 162000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-6/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-24T11:05:00Z'
+      },
+      {
+        id: 'vault-c6-ant',
+        type: 'attestation_non_travail',
+        label: 'Attestation de non travail ou autorisation employeur',
+        fileName: 'Attestation_Non_Travail_Imane.pdf',
+        fileSize: 136000,
+        fileUrl: '/api/applications/app-006a/documents/doc-6a-9/content',
+        isRequired: true,
+        status: 'valide',
+        provenance: 'fourni_candidat',
+        uploadedAt: '2026-09-24T11:06:00Z'
+      }
+    ],
+    createdAt: '2026-09-24T11:00:00Z'
   },
   {
     id: 'usr-chercheur-1',
@@ -243,22 +762,22 @@ export const DEMO_USERS: User[] = [
     createdAt: '2019-02-14T14:00:00Z'
   },
   {
-    id: 'usr-candidat-2',
-    email: 'mehdi.benjelloun@usmba.ac.ma',
-    firstName: 'Mehdi',
-    lastName: 'Benjelloun',
-    cin: 'CD712390',
-    cne: 'N138129845',
-    phone: '+212 6 70 88 99 00',
-    establishmentId: 'ensa',
+    id: 'usr-candidat-admis',
+    email: 'salma.elfassi@usmba.ac.ma',
+    firstName: 'Salma',
+    lastName: 'El Fassi',
+    cin: 'CD908123',
+    cne: 'N132456789',
+    phone: '+212 6 64 55 66 77',
+    establishmentId: 'fsdm',
     roles: ['candidat'],
     currentRole: 'candidat',
     isActive: true,
     isEmailVerified: true,
     studentOriginType: 'interne_usmba',
-    originEstablishment: 'École Nationale des Sciences Appliquées de Fès (USMBA)',
-    masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
-    createdAt: '2026-09-20T10:15:00Z'
+    originEstablishment: 'Faculté des Sciences Dhar El Mahraz (USMBA - Fès)',
+    masterSpecialty: 'Réseaux, Systèmes et Sécurité Informatique',
+    createdAt: '2026-09-16T14:00:00Z'
   },
   {
     id: 'usr-jury-1',
@@ -486,7 +1005,15 @@ export const OFFICIAL_PROFESSOR_SUBJECTS: DoctoralSubject[] = [
     submissionDate: '2026-09-02T11:00:00Z',
     validationDate: '2026-09-06T09:15:00Z',
     academicYear: '2026-2027',
-    date_creation: '2026-09-02T11:00:00Z'
+    date_creation: '2026-09-02T11:00:00Z',
+    requiredExtraDocuments: [
+      {
+        type: 'lettre_recommandation',
+        label: 'Lettre de recommandation académique (spécifique LERMA)',
+        isSubjectSpecific: true,
+        isRequired: true
+      }
+    ]
   },
   {
     id: 'suj-003',
@@ -604,7 +1131,15 @@ export const OFFICIAL_PROFESSOR_SUBJECTS: DoctoralSubject[] = [
     submissionDate: '2026-09-08T10:00:00Z',
     validationDate: '2026-09-12T11:30:00Z',
     academicYear: '2026-2027',
-    date_creation: '2026-09-08T10:00:00Z'
+    date_creation: '2026-09-08T10:00:00Z',
+    requiredExtraDocuments: [
+      {
+        type: 'lettre_recommandation',
+        label: 'Lettre de recommandation ou attestation axe Smart Grids (spécifique LISAC)',
+        isSubjectSpecific: true,
+        isRequired: true
+      }
+    ]
   },
   {
     id: 'suj-007',
@@ -671,12 +1206,13 @@ export const DOCTORAL_SUBJECTS: DoctoralSubject[] = [
 ];
 
 export const INITIAL_APPLICATIONS: CandidateApplication[] = [
+  // SCÉNARIO 1 : Candidat interne USMBA — dossier complet
   {
     id: 'app-001',
     referenceNumber: 'USMBA-DOC-2026-7842',
     candidateId: 'usr-candidat-1',
-    candidateName: 'Hajar Amellah',
-    candidateEmail: 'hajar.amellah@usmba.ac.ma',
+    candidateName: 'Kenza Benali',
+    candidateEmail: 'kenza.benali@usmba.ac.ma',
     candidatePhone: '+212 6 61 23 45 67',
     cin: 'CD654321',
     cne: 'N134098765',
@@ -700,28 +1236,133 @@ export const INITIAL_APPLICATIONS: CandidateApplication[] = [
     score: 18.25,
     rank: 1,
     documents: [
-      { id: 'doc-1', type: 'cin', label: 'Carte d\'Identité Nationale (CIN)', fileName: 'CIN_CD654321_Hajar.pdf', fileSize: 185000, fileUrl: '/api/applications/app-001/documents/doc-1/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:15:00Z' },
+      { id: 'doc-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD654321_Kenza_Benali.pdf', fileSize: 185000, fileUrl: '/api/applications/app-001/documents/doc-1/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:15:00Z' },
       { id: 'doc-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Baccalaureat_N134098765.pdf', fileSize: 210000, fileUrl: '/api/applications/app-001/documents/doc-2/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-18T10:15:00Z' },
       { id: 'doc-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_SMI_N134098765.pdf', fileSize: 245000, fileUrl: '/api/applications/app-001/documents/doc-3/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-18T10:16:00Z' },
       { id: 'doc-4', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Attestation_Master_IDSI.pdf', fileSize: 268000, fileUrl: '/api/applications/app-001/documents/doc-4/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-18T10:16:00Z' },
-      { id: 'doc-5', type: 'releves_notes', label: 'Relevés de notes de l\'ensemble du cursus (S1 à S4)', fileName: 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf', fileSize: 312000, fileUrl: '/api/applications/app-001/documents/doc-5/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-18T10:17:00Z' },
-      { id: 'doc-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Hajar_Amellah_2026.pdf', fileSize: 164000, fileUrl: '/api/applications/app-001/documents/doc-6/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:17:00Z' },
-      { id: 'doc-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Hajar.pdf', fileSize: 142000, fileUrl: '/api/applications/app-001/documents/doc-7/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:18:00Z' },
-      { id: 'doc-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse (3 à 5 pages)', fileName: 'Projet_Recherche_IA_Medicale.pdf', fileSize: 298000, fileUrl: '/api/applications/app-001/documents/doc-8/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:19:00Z' },
-      { id: 'doc-9', type: 'attestation_non_travail', label: 'Attestation de non travail ou autorisation employeur', fileName: 'Attestation_Non_Travail_Hajar.pdf', fileSize: 132000, fileUrl: '/api/applications/app-001/documents/doc-9/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:19:00Z' }
+      { id: 'doc-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf', fileSize: 312000, fileUrl: '/api/applications/app-001/documents/doc-5/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-18T10:17:00Z' },
+      { id: 'doc-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Kenza_Benali_2026.pdf', fileSize: 164000, fileUrl: '/api/applications/app-001/documents/doc-6/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:17:00Z' },
+      { id: 'doc-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Kenza.pdf', fileSize: 142000, fileUrl: '/api/applications/app-001/documents/doc-7/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:18:00Z' },
+      { id: 'doc-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse (3 à 5 pages)', fileName: 'Projet_Recherche_Vision_Olivier.pdf', fileSize: 298000, fileUrl: '/api/applications/app-001/documents/doc-8/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:19:00Z' },
+      { id: 'doc-9', type: 'attestation_non_travail', label: 'Attestation de non travail ou autorisation employeur', fileName: 'Attestation_Non_Travail_Kenza.pdf', fileSize: 132000, fileUrl: '/api/applications/app-001/documents/doc-9/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-18T10:19:00Z' }
     ],
     correctionRequests: [],
     statusHistory: [
-      { id: 'sh-1', status: 'soumise', comment: 'Dossier soumis par la candidate avec accusé de réception.', changedBy: 'Hajar Amellah', timestamp: '2026-09-18T10:20:00Z' },
+      { id: 'sh-1', status: 'soumise', comment: 'Dossier complet déposé (simulation académique).', changedBy: 'Kenza Benali', timestamp: '2026-09-18T10:20:00Z' },
       { id: 'sh-2', status: 'en_cours_verification', comment: 'Instruction des pièces justificatives par le bureau doctoral.', changedBy: 'Karim Mansouri', timestamp: '2026-09-22T09:00:00Z' },
       { id: 'sh-3', status: 'recevable', comment: 'Dossier complet et certifié conforme. Éligibilité académique validée.', changedBy: 'Karim Mansouri', timestamp: '2026-09-25T11:30:00Z' },
-      { id: 'sh-4', status: 'entretien_programme', comment: 'Candidature retenue pour l\'audition orale devant le jury de sélection.', changedBy: 'Pr. Mustapha El Ouazzani', timestamp: '2026-10-02T15:40:00Z' }
+      { id: 'sh-4', status: 'entretien_programme', comment: "Candidature retenue pour l'audition orale devant le jury de sélection.", changedBy: 'Pr. Mustapha El Ouazzani', timestamp: '2026-10-02T15:40:00Z' }
     ]
   },
+
+  // SCÉNARIO 2 : Candidat interne USMBA — dossier incomplet (1 pièce manquante clairement identifiée)
   {
-    id: 'app-ext-001',
+    id: 'app-002',
+    referenceNumber: 'USMBA-DOC-2026-5120',
+    candidateId: 'usr-candidat-2',
+    candidateName: 'Youssef Berrada',
+    candidateEmail: 'youssef.berrada@usmba.ac.ma',
+    candidatePhone: '+212 6 70 88 99 00',
+    cin: 'CD712390',
+    cne: 'N138129845',
+    studentOriginType: 'interne_usmba',
+    apogeeSyncStatus: 'synced',
+    subjectId: 'suj-002',
+    subjectTitle: 'Optimisation Thermomécanique et Modélisation Numérique de Nouveaux Matériaux à Changement de Phase pour le Stockage Énergétique Solaire',
+    laboratoryId: 'lerma',
+    establishmentId: 'ensa',
+    supervisorName: 'Pr. Fatima-Zahra BENCHEIKH',
+    discipline: 'Physique des Matériaux',
+    masterOriginUniversity: 'Université Sidi Mohamed Ben Abdellah - ENSA Fès',
+    masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
+    masterGraduationYear: 2026,
+    masterMention: 'Bien',
+    status: 'incomplete',
+    assignedReviewerId: 'usr-admin-1',
+    assignedReviewerName: 'Karim Mansouri (Scolarité)',
+    submittedAt: '2026-09-22T16:00:00Z',
+    updatedAt: '2026-09-27T10:00:00Z',
+    documents: [
+      { id: 'doc-21', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD712390_Youssef_Berrada.pdf', fileSize: 185000, fileUrl: '/api/applications/app-002/documents/doc-21/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:50:00Z' },
+      { id: 'doc-22', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N138129845.pdf', fileSize: 190000, fileUrl: '/api/applications/app-002/documents/doc-22/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-22T15:51:00Z' },
+      { id: 'doc-23', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N138129845.pdf', fileSize: 220000, fileUrl: '/api/applications/app-002/documents/doc-23/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-22T15:52:00Z' },
+      { id: 'doc-24', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'Master_Youssef_Berrada_ENSA.pdf', fileSize: 242000, fileUrl: '/api/applications/app-002/documents/doc-24/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-22T15:53:00Z' },
+      { id: 'doc-25', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'Releves_Youssef_Berrada_S1_S4.pdf', fileSize: 265000, fileUrl: '/api/applications/app-002/documents/doc-25/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-22T15:54:00Z' },
+      { id: 'doc-26', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Youssef_Berrada.pdf', fileSize: 140000, fileUrl: '/api/applications/app-002/documents/doc-26/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:55:00Z' },
+      { id: 'doc-27', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Youssef_Berrada.pdf', fileSize: 130000, fileUrl: '/api/applications/app-002/documents/doc-27/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:56:00Z' },
+      { id: 'doc-28', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Materiaux_Solaires.pdf', fileSize: 270000, fileUrl: '/api/applications/app-002/documents/doc-28/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:57:00Z' },
+      { id: 'doc-2a', type: 'lettre_recommandation', label: 'Lettre de recommandation académique (spécifique LERMA)', fileName: 'Recommandation_LERMA_Youssef.pdf', fileSize: 128000, fileUrl: '/api/applications/app-002/documents/doc-2a/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:58:00Z' },
+      { id: 'doc-29', type: 'attestation_non_travail', label: 'Attestation de non travail (ou justificatif de statut)', fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce manquante obligatoire : veuillez téléverser votre attestation de non-travail pour finaliser la recevabilité du dossier.' }
+    ],
+    correctionRequests: [],
+    statusHistory: [
+      { id: 'sh-21', status: 'soumise', comment: 'Dépôt initial enregistré.', changedBy: 'Youssef Berrada', timestamp: '2026-09-22T16:00:00Z' },
+      { id: 'sh-22', status: 'incomplete', comment: 'Dossier en attente de 1 pièce manquante : Attestation de non travail.', changedBy: 'Système GCD (Contrôle de complétude)', timestamp: '2026-09-27T10:00:00Z' }
+    ]
+  },
+
+  // SCÉNARIO 3 : Candidat interne USMBA — document rejeté (motif visible et remplacement fonctionnel)
+  {
+    id: 'app-003',
+    referenceNumber: 'USMBA-DOC-2026-6214',
+    candidateId: 'usr-candidat-3',
+    candidateName: 'Amine Tazi',
+    candidateEmail: 'amine.tazi@usmba.ac.ma',
+    candidatePhone: '+212 6 68 12 34 90',
+    cin: 'CD823451',
+    cne: 'N139445566',
+    studentOriginType: 'interne_usmba',
+    apogeeSyncStatus: 'synced',
+    subjectId: 'suj-003',
+    subjectTitle: 'Protocoles Cryptographiques Post-Quantiques et Architectures Zero-Trust pour la Sécurisation des Systèmes d\'Information Hospitaliers',
+    laboratoryId: 'lim',
+    establishmentId: 'fsdm',
+    supervisorName: 'Pr. Mohammed ZOUHAIR',
+    discipline: 'Cybersécurité',
+    masterOriginUniversity: 'Université Sidi Mohamed Ben Abdellah - FSDM',
+    masterSpecialty: 'Réseaux, Systèmes et Sécurité Informatique',
+    masterGraduationYear: 2026,
+    masterMention: 'Bien',
+    status: 'correction_demandee',
+    assignedReviewerId: 'usr-admin-1',
+    assignedReviewerName: 'Karim Mansouri (Scolarité)',
+    submittedAt: '2026-09-24T10:00:00Z',
+    updatedAt: '2026-09-29T14:20:00Z',
+    documents: [
+      { id: 'doc-31', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD823451_Amine_Tazi.pdf', fileSize: 182000, fileUrl: '/api/applications/app-003/documents/doc-31/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-24T09:50:00Z' },
+      { id: 'doc-32', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N139445566.pdf', fileSize: 195000, fileUrl: '/api/applications/app-003/documents/doc-32/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-24T09:51:00Z' },
+      { id: 'doc-33', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N139445566.pdf', fileSize: 215000, fileUrl: '/api/applications/app-003/documents/doc-33/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-24T09:52:00Z' },
+      { id: 'doc-34', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Master_N139445566.pdf', fileSize: 235000, fileUrl: '/api/applications/app-003/documents/doc-34/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-24T09:53:00Z' },
+      { id: 'doc-35', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'Releves_S1_S4_Amine_Scan.pdf', fileSize: 152000, fileUrl: '/api/applications/app-003/documents/doc-35/content', isRequired: true, status: 'rejete', provenance: 'fourni_candidat', rejectionReason: "Le relevé de notes du semestre S4 est illisible et ne comporte pas le cachet officiel de la scolarité.", uploadedAt: '2026-09-24T09:54:00Z' },
+      { id: 'doc-36', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Amine_Tazi.pdf', fileSize: 148000, fileUrl: '/api/applications/app-003/documents/doc-36/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-24T09:55:00Z' },
+      { id: 'doc-37', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Amine.pdf', fileSize: 138000, fileUrl: '/api/applications/app-003/documents/doc-37/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-24T09:56:00Z' },
+      { id: 'doc-38', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_ZeroTrust_Amine.pdf', fileSize: 274000, fileUrl: '/api/applications/app-003/documents/doc-38/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-24T09:57:00Z' },
+      { id: 'doc-39', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Amine.pdf', fileSize: 138000, fileUrl: '/api/applications/app-003/documents/doc-39/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-24T09:58:00Z' }
+    ],
+    correctionRequests: [
+      {
+        id: 'corr-003',
+        applicationId: 'app-003',
+        requestedBy: 'Karim Mansouri (Administration Scolarité)',
+        requestedAt: '2026-09-29T14:20:00Z',
+        deadline: '2026-11-18T23:59:59Z',
+        comment: 'Document rejeté lors du contrôle formel : merci de déposer un scan net et cacheté de vos relevés de notes S1 à S4.',
+        missingOrInvalidDocs: ['releves_notes'],
+        isResolved: false
+      }
+    ],
+    statusHistory: [
+      { id: 'sh-31', status: 'soumise', comment: 'Dépôt initial par Amine Tazi.', changedBy: 'Amine Tazi', timestamp: '2026-09-24T10:00:00Z' },
+      { id: 'sh-32', status: 'en_cours_verification', comment: 'Vérification des pièces par la scolarité.', changedBy: 'Karim Mansouri', timestamp: '2026-09-28T09:15:00Z' },
+      { id: 'sh-33', status: 'correction_demandee', comment: 'Rejet du relevé de notes S4 (scan illisible sans cachet officiel).', changedBy: 'Karim Mansouri', timestamp: '2026-09-29T14:20:00Z' }
+    ]
+  },
+
+  // SCÉNARIO 4 : Candidat externe — dossier complet
+  {
+    id: 'app-004',
     referenceNumber: 'USMBA-DOC-2026-8415',
-    candidateId: 'usr-candidat-externe',
+    candidateId: 'usr-candidat-4',
     candidateName: 'Nadia Chraibi',
     candidateEmail: 'nadia.chraibi@usmba.ac.ma',
     candidatePhone: '+212 6 65 44 33 22',
@@ -745,30 +1386,120 @@ export const INITIAL_APPLICATIONS: CandidateApplication[] = [
     submittedAt: '2026-10-04T11:15:00Z',
     updatedAt: '2026-10-04T11:15:00Z',
     documents: [
-      { id: 'doc-ext-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_BE849201_Nadia_Chraibi_Demo.pdf', fileSize: 192000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-1/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:05:00Z' },
-      { id: 'doc-ext-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Baccalaureat_Nadia_Chraibi_Demo.pdf', fileSize: 215000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-2/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:06:00Z' },
-      { id: 'doc-ext-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'Diplome_Licence_UH2C_Demo.pdf', fileSize: 248000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-3/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:07:00Z' },
-      { id: 'doc-ext-4', type: 'master', label: "Diplôme de Master, Master Spécialisé ou Diplôme d'Ingénieur", fileName: 'Diplome_Master_UH2C_Chraibi_Demo.pdf', fileSize: 286000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-4/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:08:00Z' },
-      { id: 'doc-ext-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus universitaire (S1 à S4)", fileName: 'Releves_Notes_S1_S4_UH2C_Demo.pdf', fileSize: 334000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-5/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:09:00Z' },
-      { id: 'doc-ext-6', type: 'cv', label: 'Curriculum Vitae détaillé et actualisé', fileName: 'CV_Nadia_Chraibi_Demo.pdf', fileSize: 174000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-6/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:10:00Z' },
-      { id: 'doc-ext-7', type: 'lettre_motivation', label: 'Lettre de motivation argumentée', fileName: 'Lettre_Motivation_PQC_Chraibi_Demo.pdf', fileSize: 152000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-7/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:11:00Z' },
-      { id: 'doc-ext-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse (3 à 5 pages)', fileName: 'Avant_Projet_PQC_ZeroTrust_Demo.pdf', fileSize: 318000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-8/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:12:00Z' },
-      { id: 'doc-ext-9', type: 'attestation_non_travail', label: "Attestation de non travail ou autorisation de l'employeur", fileName: 'Attestation_Non_Travail_Chraibi_Demo.pdf', fileSize: 141000, fileUrl: '/api/applications/app-ext-001/documents/doc-ext-9/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:13:00Z' }
+      { id: 'doc-41', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_BE849201_Nadia_Chraibi_Demo.pdf', fileSize: 192000, fileUrl: '/api/applications/app-004/documents/doc-41/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:05:00Z' },
+      { id: 'doc-42', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Baccalaureat_Nadia_Chraibi_Demo.pdf', fileSize: 215000, fileUrl: '/api/applications/app-004/documents/doc-42/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:06:00Z' },
+      { id: 'doc-43', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'Diplome_Licence_UH2C_Demo.pdf', fileSize: 248000, fileUrl: '/api/applications/app-004/documents/doc-43/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:07:00Z' },
+      { id: 'doc-44', type: 'master', label: "Diplôme de Master ou Diplôme d'Ingénieur", fileName: 'Diplome_Master_UH2C_Chraibi_Demo.pdf', fileSize: 286000, fileUrl: '/api/applications/app-004/documents/doc-44/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:08:00Z' },
+      { id: 'doc-45', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'Releves_Notes_S1_S4_UH2C_Demo.pdf', fileSize: 334000, fileUrl: '/api/applications/app-004/documents/doc-45/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:09:00Z' },
+      { id: 'doc-46', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Nadia_Chraibi_Demo.pdf', fileSize: 174000, fileUrl: '/api/applications/app-004/documents/doc-46/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:10:00Z' },
+      { id: 'doc-47', type: 'lettre_motivation', label: 'Lettre de motivation argumentée', fileName: 'Lettre_Motivation_PQC_Chraibi_Demo.pdf', fileSize: 152000, fileUrl: '/api/applications/app-004/documents/doc-47/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:11:00Z' },
+      { id: 'doc-48', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse (3 à 5 pages)', fileName: 'Avant_Projet_PQC_ZeroTrust_Demo.pdf', fileSize: 318000, fileUrl: '/api/applications/app-004/documents/doc-48/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:12:00Z' },
+      { id: 'doc-49', type: 'attestation_non_travail', label: "Attestation de non travail ou autorisation de l'employeur", fileName: 'Attestation_Non_Travail_Chraibi_Demo.pdf', fileSize: 141000, fileUrl: '/api/applications/app-004/documents/doc-49/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-04T11:13:00Z' }
     ],
     correctionRequests: [],
     statusHistory: [
-      { id: 'sh-ext-1', status: 'soumise', comment: 'Dossier externe complet déposé avec justificatifs académiques UH2C pour contrôle administratif.', changedBy: 'Nadia Chraibi', timestamp: '2026-10-04T11:15:00Z' }
+      { id: 'sh-41', status: 'soumise', comment: 'Dossier externe complet déposé avec justificatifs académiques UH2C pour contrôle administratif.', changedBy: 'Nadia Chraibi', timestamp: '2026-10-04T11:15:00Z' }
+    ]
+  },
+
+  // SCÉNARIO 5 : Candidat externe — dossier incomplet (complétion progressive de plusieurs pièces)
+  {
+    id: 'app-005',
+    referenceNumber: 'USMBA-DOC-2026-4390',
+    candidateId: 'usr-candidat-5',
+    candidateName: 'Tarik El Mansouri',
+    candidateEmail: 'tarik.elmansouri@usmba.ac.ma',
+    candidatePhone: '+212 6 63 22 44 88',
+    cin: 'AE519204',
+    cne: 'M142087612',
+    studentOriginType: 'externe',
+    apogeeSyncStatus: 'external',
+    subjectId: 'suj-006',
+    subjectTitle: 'Systèmes Multi-Agents Explicables pour la Régulation Prédictive des Réseaux Électriques Intelligents (Smart Grids)',
+    laboratoryId: 'lisac',
+    establishmentId: 'fsdm',
+    supervisorName: 'Pr. Abdelhafid EL ALAOUI',
+    discipline: 'Informatique & IA',
+    masterOriginUniversity: 'Université Cadi Ayyad de Marrakech — Faculté des Sciences Semlalia',
+    masterSpecialty: 'Master Systèmes Intelligents & Énergie',
+    masterGraduationYear: 2026,
+    masterMention: 'Bien',
+    status: 'incomplete',
+    assignedReviewerId: 'usr-admin-1',
+    assignedReviewerName: 'Karim Mansouri (Scolarité)',
+    submittedAt: '2026-10-05T10:15:00Z',
+    updatedAt: '2026-10-05T10:15:00Z',
+    documents: [
+      { id: 'doc-51', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_AE519204_Tarik_ElMansouri.pdf', fileSize: 176000, fileUrl: '/api/applications/app-005/documents/doc-51/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-05T10:00:00Z' },
+      { id: 'doc-52', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Baccalaureat_Tarik_ElMansouri.pdf', fileSize: 205000, fileUrl: '/api/applications/app-005/documents/doc-52/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-05T10:02:00Z' },
+      { id: 'doc-53', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'Licence_UCA_Tarik_ElMansouri.pdf', fileSize: 229000, fileUrl: '/api/applications/app-005/documents/doc-53/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-05T10:03:00Z' },
+      { id: 'doc-54', type: 'master', label: "Diplôme de Master ou Diplôme d'Ingénieur", fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce manquante : diplôme de Master ou attestation de réussite UCA à téléverser.' },
+      { id: 'doc-55', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce manquante : relevés de notes S1 à S4 à fournir.' },
+      { id: 'doc-56', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Tarik_ElMansouri.pdf', fileSize: 151000, fileUrl: '/api/applications/app-005/documents/doc-56/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-05T10:05:00Z' },
+      { id: 'doc-57', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Tarik.pdf', fileSize: 139000, fileUrl: '/api/applications/app-005/documents/doc-57/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-05T10:07:00Z' },
+      { id: 'doc-58', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_SmartGrids_Tarik.pdf', fileSize: 288000, fileUrl: '/api/applications/app-005/documents/doc-58/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-05T10:09:00Z' },
+      { id: 'doc-59', type: 'attestation_non_travail', label: 'Attestation de non travail (ou justificatif de statut)', fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce manquante : attestation de non-travail requise.' },
+      { id: 'doc-5a', type: 'lettre_recommandation', label: 'Lettre de recommandation ou attestation axe Smart Grids (spécifique LISAC)', fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce spécifique manquante pour ce sujet LISAC.' }
+    ],
+    correctionRequests: [],
+    statusHistory: [
+      { id: 'sh-51', status: 'incomplete', comment: 'Dépôt partiel enregistré pour complétion progressive (4 pièces à compléter).', changedBy: 'Tarik El Mansouri', timestamp: '2026-10-05T10:15:00Z' }
+    ]
+  },
+
+  // SCÉNARIO 6 : Candidat multi-candidatures (pièces communes réutilisées + 1 pièce spécifique manquante sur un seul sujet)
+  {
+    id: 'app-006a',
+    referenceNumber: 'USMBA-DOC-2026-9101',
+    candidateId: 'usr-candidat-6',
+    candidateName: 'Imane Bennani',
+    candidateEmail: 'imane.bennani@usmba.ac.ma',
+    candidatePhone: '+212 6 69 77 88 11',
+    cin: 'CD781234',
+    cne: 'N136778899',
+    studentOriginType: 'interne_usmba',
+    apogeeSyncStatus: 'synced',
+    subjectId: 'suj-001',
+    subjectTitle: 'Architectures d\'Apprentissage Profond et Vision par Ordinateur pour la Détection Précoce des Maladies des Cultures d\'Olivier au Maroc',
+    laboratoryId: 'lisac',
+    establishmentId: 'fsdm',
+    supervisorName: 'Pr. Abdelhafid EL ALAOUI',
+    discipline: 'Informatique & IA',
+    masterOriginUniversity: 'Université Sidi Mohamed Ben Abdellah - FSDM',
+    masterSpecialty: 'Master Science des Données et Systèmes Intelligents',
+    masterGraduationYear: 2026,
+    masterMention: 'Très Bien',
+    status: 'recevable',
+    assignedReviewerId: 'usr-admin-1',
+    assignedReviewerName: 'Karim Mansouri (Scolarité)',
+    submittedAt: '2026-09-25T10:30:00Z',
+    updatedAt: '2026-10-01T14:00:00Z',
+    documents: [
+      { id: 'doc-6a-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD781234_Imane_Bennani.pdf', fileSize: 184000, fileUrl: '/api/applications/app-006a/documents/doc-6a-1/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:20:00Z' },
+      { id: 'doc-6a-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N136778899.pdf', fileSize: 204000, fileUrl: '/api/applications/app-006a/documents/doc-6a-2/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:21:00Z' },
+      { id: 'doc-6a-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N136778899.pdf', fileSize: 238000, fileUrl: '/api/applications/app-006a/documents/doc-6a-3/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:22:00Z' },
+      { id: 'doc-6a-4', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Master_N136778899.pdf', fileSize: 262000, fileUrl: '/api/applications/app-006a/documents/doc-6a-4/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:23:00Z' },
+      { id: 'doc-6a-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'APOGEE_DEMO_Releves_N136778899.pdf', fileSize: 304000, fileUrl: '/api/applications/app-006a/documents/doc-6a-5/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:24:00Z' },
+      { id: 'doc-6a-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Imane_Bennani_2026.pdf', fileSize: 162000, fileUrl: '/api/applications/app-006a/documents/doc-6a-6/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:25:00Z' },
+      { id: 'doc-6a-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Imane_LISAC.pdf', fileSize: 145000, fileUrl: '/api/applications/app-006a/documents/doc-6a-7/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:26:00Z' },
+      { id: 'doc-6a-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Vision_Imane.pdf', fileSize: 295000, fileUrl: '/api/applications/app-006a/documents/doc-6a-8/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:27:00Z' },
+      { id: 'doc-6a-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Imane.pdf', fileSize: 136000, fileUrl: '/api/applications/app-006a/documents/doc-6a-9/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:28:00Z' }
+    ],
+    correctionRequests: [],
+    statusHistory: [
+      { id: 'sh-6a-1', status: 'soumise', comment: 'Candidature #1 déposée sur le sujet suj-001.', changedBy: 'Imane Bennani', timestamp: '2026-09-25T10:30:00Z' },
+      { id: 'sh-6a-2', status: 'recevable', comment: 'Toutes les pièces communes et spécifiques sont conformes.', changedBy: 'Karim Mansouri', timestamp: '2026-10-01T14:00:00Z' }
     ]
   },
   {
-    id: 'app-002',
-    referenceNumber: 'USMBA-DOC-2026-5120',
-    candidateId: 'usr-candidat-2',
-    candidateName: 'Mehdi Benjelloun',
-    candidateEmail: 'mehdi.benjelloun@usmba.ac.ma',
-    candidatePhone: '+212 6 70 88 99 00',
-    cin: 'CD712390',
-    cne: 'N138129845',
+    id: 'app-006b',
+    referenceNumber: 'USMBA-DOC-2026-9102',
+    candidateId: 'usr-candidat-6',
+    candidateName: 'Imane Bennani',
+    candidateEmail: 'imane.bennani@usmba.ac.ma',
+    candidatePhone: '+212 6 69 77 88 11',
+    cin: 'CD781234',
+    cne: 'N136778899',
     studentOriginType: 'interne_usmba',
     apogeeSyncStatus: 'synced',
     subjectId: 'suj-002',
@@ -777,54 +1508,45 @@ export const INITIAL_APPLICATIONS: CandidateApplication[] = [
     establishmentId: 'ensa',
     supervisorName: 'Pr. Fatima-Zahra BENCHEIKH',
     discipline: 'Physique des Matériaux',
-    masterOriginUniversity: 'Université Sidi Mohamed Ben Abdellah - ENSA Fès',
-    masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
+    masterOriginUniversity: 'Université Sidi Mohamed Ben Abdellah - FSDM',
+    masterSpecialty: 'Master Science des Données et Systèmes Intelligents',
     masterGraduationYear: 2026,
-    masterMention: 'Bien',
-    status: 'correction_demandee',
+    masterMention: 'Très Bien',
+    status: 'incomplete',
     assignedReviewerId: 'usr-admin-1',
-    assignedReviewerName: 'Karim Mansouri',
-    submittedAt: '2026-09-22T16:00:00Z',
-    updatedAt: '2026-09-27T10:00:00Z',
+    assignedReviewerName: 'Karim Mansouri (Scolarité)',
+    submittedAt: '2026-10-03T16:10:00Z',
+    updatedAt: '2026-10-03T16:10:00Z',
     documents: [
-      { id: 'doc-21', type: 'cin', label: 'Carte d\'Identité Nationale (CIN)', fileName: 'CIN_Mehdi.pdf', fileSize: 185000, fileUrl: '/api/applications/app-002/documents/doc-21/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:50:00Z' },
-      { id: 'doc-22', type: 'bac', label: 'Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N138129845.pdf', fileSize: 190000, fileUrl: '/api/applications/app-002/documents/doc-22/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-22T15:51:00Z' },
-      { id: 'doc-23', type: 'licence', label: 'Diplôme de Licence', fileName: 'APOGEE_DEMO_Licence_N138129845.pdf', fileSize: 220000, fileUrl: '/api/applications/app-002/documents/doc-23/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-22T15:52:00Z' },
-      { id: 'doc-24', type: 'master', label: 'Diplôme de Master ou Attestation', fileName: 'Master_Mehdi_Scan_Illisible.pdf', fileSize: 240000, fileUrl: '/api/applications/app-002/documents/doc-24/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:53:00Z' },
-      { id: 'doc-25', type: 'releves_notes', label: 'Relevés de notes de l\'ensemble du cursus (S1 à S4)', fileName: 'releves_incomplets.pdf', fileSize: 150000, fileUrl: '/api/applications/app-002/documents/doc-25/content', isRequired: true, status: 'rejete', provenance: 'fourni_candidat', rejectionReason: 'Le relevé du semestre S4 manque le cachet officiel de l\'établissement d\'origine.', uploadedAt: '2026-09-22T15:54:00Z' },
-      { id: 'doc-26', type: 'cv', label: 'Curriculum Vitae', fileName: 'CV_Mehdi.pdf', fileSize: 140000, fileUrl: '/api/applications/app-002/documents/doc-26/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:55:00Z' },
-      { id: 'doc-27', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Mehdi.pdf', fileSize: 130000, fileUrl: '/api/applications/app-002/documents/doc-27/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:56:00Z' },
-      { id: 'doc-28', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Materiaux_Solaires.pdf', fileSize: 270000, fileUrl: '/api/applications/app-002/documents/doc-28/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-22T15:57:00Z' },
-      { id: 'doc-29', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Document manquant obligatoire pour les étudiants non-salariés.' }
+      { id: 'doc-6b-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD781234_Imane_Bennani.pdf', fileSize: 184000, fileUrl: '/api/applications/app-006a/documents/doc-6a-1/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:20:00Z' },
+      { id: 'doc-6b-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N136778899.pdf', fileSize: 204000, fileUrl: '/api/applications/app-006a/documents/doc-6a-2/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:21:00Z' },
+      { id: 'doc-6b-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N136778899.pdf', fileSize: 238000, fileUrl: '/api/applications/app-006a/documents/doc-6a-3/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:22:00Z' },
+      { id: 'doc-6b-4', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Master_N136778899.pdf', fileSize: 262000, fileUrl: '/api/applications/app-006a/documents/doc-6a-4/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:23:00Z' },
+      { id: 'doc-6b-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'APOGEE_DEMO_Releves_N136778899.pdf', fileSize: 304000, fileUrl: '/api/applications/app-006a/documents/doc-6a-5/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true, uploadedAt: '2026-09-25T10:24:00Z' },
+      { id: 'doc-6b-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Imane_Bennani_2026.pdf', fileSize: 162000, fileUrl: '/api/applications/app-006a/documents/doc-6a-6/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:25:00Z' },
+      { id: 'doc-6b-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Imane.pdf', fileSize: 136000, fileUrl: '/api/applications/app-006a/documents/doc-6a-9/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat', uploadedAt: '2026-09-25T10:28:00Z' },
+      { id: 'doc-6b-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Imane_LERMA.pdf', fileSize: 141000, fileUrl: '/api/applications/app-006b/documents/doc-6b-7/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-03T16:08:00Z' },
+      { id: 'doc-6b-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Modelisation_Thermique_Imane.pdf', fileSize: 280000, fileUrl: '/api/applications/app-006b/documents/doc-6b-8/content', isRequired: true, status: 'en_attente', provenance: 'fourni_candidat', uploadedAt: '2026-10-03T16:09:00Z' },
+      { id: 'doc-6b-rec', type: 'lettre_recommandation', label: 'Lettre de recommandation académique (spécifique LERMA)', fileName: '', fileSize: 0, fileUrl: '', isRequired: true, status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce spécifique manquante uniquement pour ce sujet LERMA (vos pièces communes restent valides).' }
     ],
-    correctionRequests: [
-      {
-        id: 'corr-001',
-        applicationId: 'app-002',
-        requestedBy: 'Karim Mansouri (Administration Scolarité)',
-        requestedAt: '2026-09-27T10:00:00Z',
-        deadline: '2026-11-15T23:59:59Z',
-        comment: 'Pièce justificative non conforme et document manquant : veuillez impérativement fournir le relevé officiel S4 cacheté et l\'attestation de non travail délivrée par les autorités compétentes.',
-        missingOrInvalidDocs: ['releves_notes', 'attestation_non_travail'],
-        isResolved: false
-      }
-    ],
+    correctionRequests: [],
     statusHistory: [
-      { id: 'sh-21', status: 'soumise', comment: 'Dépôt initial.', changedBy: 'Mehdi Benjelloun', timestamp: '2026-09-22T16:00:00Z' },
-      { id: 'sh-22', status: 'incomplete', comment: 'Anomalies détectées lors du contrôle formel.', changedBy: 'Karim Mansouri', timestamp: '2026-09-27T09:45:00Z' },
-      { id: 'sh-23', status: 'correction_demandee', comment: 'Demande officielle de régularisation adressée au candidat avec délai de 15 jours.', changedBy: 'Karim Mansouri', timestamp: '2026-09-27T10:00:00Z' }
+      { id: 'sh-6b-1', status: 'incomplete', comment: 'Pièces communes réutilisées automatiquement depuis le dossier personnel. 1 pièce spécifique manquante (Lettre de recommandation LERMA).', changedBy: 'Imane Bennani', timestamp: '2026-10-03T16:10:00Z' }
     ]
   },
+
+  // Candidat admis (pour résultats publiés & inscription administrative définitive)
   {
-    id: 'app-003',
+    id: 'app-adm-001',
     referenceNumber: 'USMBA-DOC-2026-9041',
-    candidateId: 'usr-candidat-3',
+    candidateId: 'usr-candidat-admis',
     candidateName: 'Salma El Fassi',
     candidateEmail: 'salma.elfassi@usmba.ac.ma',
     candidatePhone: '+212 6 64 55 66 77',
     cin: 'CD908123',
     cne: 'N132456789',
     studentOriginType: 'interne_usmba',
+    apogeeSyncStatus: 'synced',
     subjectId: 'suj-003',
     subjectTitle: 'Protocoles Cryptographiques Post-Quantiques et Architectures Zero-Trust pour la Sécurisation des Systèmes d\'Information Hospitaliers',
     laboratoryId: 'lim',
@@ -841,22 +1563,22 @@ export const INITIAL_APPLICATIONS: CandidateApplication[] = [
     score: 19.0,
     rank: 1,
     documents: [
-      { id: 'doc-31', type: 'cin', label: 'Carte d\'Identité Nationale (CIN)', fileName: 'CIN_Salma.pdf', fileSize: 180000, fileUrl: '/api/applications/app-003/documents/doc-31/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
-      { id: 'doc-32', type: 'bac', label: 'Baccalauréat', fileName: 'Bac_Salma.pdf', fileSize: 190000, fileUrl: '/api/applications/app-003/documents/doc-32/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-      { id: 'doc-33', type: 'licence', label: 'Diplôme de Licence', fileName: 'Licence_Salma.pdf', fileSize: 210000, fileUrl: '/api/applications/app-003/documents/doc-33/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-      { id: 'doc-34', type: 'master', label: 'Diplôme de Master', fileName: 'Master_Salma.pdf', fileSize: 230000, fileUrl: '/api/applications/app-003/documents/doc-34/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-      { id: 'doc-35', type: 'releves_notes', label: 'Relevés de notes', fileName: 'Releves_Salma.pdf', fileSize: 250000, fileUrl: '/api/applications/app-003/documents/doc-35/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-      { id: 'doc-36', type: 'cv', label: 'Curriculum Vitae', fileName: 'CV_Salma.pdf', fileSize: 160000, fileUrl: '/api/applications/app-003/documents/doc-36/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
-      { id: 'doc-37', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Salma.pdf', fileSize: 150000, fileUrl: '/api/applications/app-003/documents/doc-37/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
-      { id: 'doc-38', type: 'projet_recherche', label: 'Projet de recherche', fileName: 'Projet_PostQuantique.pdf', fileSize: 280000, fileUrl: '/api/applications/app-003/documents/doc-38/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
-      { id: 'doc-39', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'NonTravail_Salma.pdf', fileSize: 140000, fileUrl: '/api/applications/app-003/documents/doc-39/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' }
+      { id: 'doc-adm-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_Salma.pdf', fileSize: 180000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-1/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
+      { id: 'doc-adm-2', type: 'bac', label: 'Baccalauréat', fileName: 'Bac_Salma.pdf', fileSize: 190000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-2/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+      { id: 'doc-adm-3', type: 'licence', label: 'Diplôme de Licence', fileName: 'Licence_Salma.pdf', fileSize: 210000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-3/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+      { id: 'doc-adm-4', type: 'master', label: 'Diplôme de Master', fileName: 'Master_Salma.pdf', fileSize: 230000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-4/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+      { id: 'doc-adm-5', type: 'releves_notes', label: 'Relevés de notes', fileName: 'Releves_Salma.pdf', fileSize: 250000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-5/content', isRequired: true, status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+      { id: 'doc-adm-6', type: 'cv', label: 'Curriculum Vitae', fileName: 'CV_Salma.pdf', fileSize: 160000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-6/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
+      { id: 'doc-adm-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Salma.pdf', fileSize: 150000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-7/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
+      { id: 'doc-adm-8', type: 'projet_recherche', label: 'Projet de recherche', fileName: 'Projet_PostQuantique.pdf', fileSize: 280000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-8/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' },
+      { id: 'doc-adm-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'NonTravail_Salma.pdf', fileSize: 140000, fileUrl: '/api/applications/app-adm-001/documents/doc-adm-9/content', isRequired: true, status: 'valide', provenance: 'fourni_candidat' }
     ],
     correctionRequests: [],
     statusHistory: [
-      { id: 'sh-31', status: 'soumise', comment: 'Dossier soumis.', changedBy: 'Salma El Fassi', timestamp: '2026-09-16T14:10:00Z' },
-      { id: 'sh-32', status: 'recevable', comment: 'Conformité validée.', changedBy: 'Karim Mansouri', timestamp: '2026-09-20T10:00:00Z' },
-      { id: 'sh-33', status: 'entretien_programme', comment: 'Audition passée le 05/10/2026.', changedBy: 'Jury', timestamp: '2026-10-05T12:00:00Z' },
-      { id: 'sh-34', status: 'admise', comment: 'Candidate classée 1ère sur liste principale (Admise).', changedBy: 'Jury / Pr. Mustapha El Ouazzani', timestamp: '2026-10-15T18:00:00Z' }
+      { id: 'sh-adm-1', status: 'soumise', comment: 'Dossier soumis.', changedBy: 'Salma El Fassi', timestamp: '2026-09-16T14:10:00Z' },
+      { id: 'sh-adm-2', status: 'recevable', comment: 'Conformité validée.', changedBy: 'Karim Mansouri', timestamp: '2026-09-20T10:00:00Z' },
+      { id: 'sh-adm-3', status: 'entretien_programme', comment: 'Audition passée le 05/10/2026.', changedBy: 'Jury', timestamp: '2026-10-05T12:00:00Z' },
+      { id: 'sh-adm-4', status: 'admise', comment: 'Candidate classée 1ère sur liste principale (Admise).', changedBy: 'Jury / Pr. Mustapha El Ouazzani', timestamp: '2026-10-15T18:00:00Z' }
     ]
   }
 ];
@@ -867,10 +1589,10 @@ export const INITIAL_INTERVIEW_SLOTS: InterviewSlot[] = [
     date: '2026-11-12',
     startTime: '09:00',
     endTime: '09:45',
-    roomOrLink: 'Salle des Thèses 2 — Bâtiment Recherche FSDM / Google Meet : meet.google.com/gcd-fsdm-aud1',
+    roomOrLink: 'Salle des Thèses 2 — Bâtiment Recherche FSDM / Visioconférence dédiée',
     juryMemberNames: ['Pr. Abdelhafid EL ALAOUI', 'Pr. Mohammed ZOUHAIR', 'Pr. Rachid CHOUKRI'],
     applicationId: 'app-001',
-    candidateName: 'Hajar Amellah',
+    candidateName: 'Kenza Benali',
     subjectTitle: 'Architectures d\'Apprentissage Profond et Vision par Ordinateur pour la Détection Précoce des Maladies des Cultures d\'Olivier au Maroc',
     isBooked: true,
     notificationSent: true
@@ -925,7 +1647,7 @@ export const INITIAL_EVALUATIONS: CandidateEvaluation[] = [
   },
   {
     id: 'eval-002',
-    applicationId: 'app-003',
+    applicationId: 'app-adm-001',
     evaluatorId: 'usr-jury-1',
     evaluatorName: 'Pr. Rachid CHOUKRI',
     evaluatorRole: 'jury',
@@ -954,24 +1676,24 @@ export const INITIAL_SELECTION_REPORT: SelectionReport = {
       updatedAt: '2026-10-15T17:00:00Z',
       updatedBy: 'Pr. Abdelhafid EL ALAOUI (Président du Jury)',
       summary: 'Procès-verbal de délibération du concours doctoral 2026-2027 - Discipline Informatique & IA. Audition de 12 candidats, délibération conforme aux critères académiques.',
-      totalAdmitted: 3,
-      totalWaiting: 2,
-      totalRejected: 7,
+      totalAdmitted: 2,
+      totalWaiting: 1,
+      totalRejected: 0,
       isApproved: true,
       approvedBy: 'Pr. Mustapha El Ouazzani (Resp. Formation Doctorale)',
       approvedAt: '2026-10-15T18:30:00Z'
     }
   ],
-  admittedApplicationIds: ['app-003', 'app-001'],
-  waitingApplicationIds: [],
-  rejectedApplicationIds: ['app-002']
+  admittedApplicationIds: ['app-adm-001', 'app-001'],
+  waitingApplicationIds: ['app-006a'],
+  rejectedApplicationIds: []
 };
 
 export const INITIAL_ADMINISTRATIVE_REGISTRATIONS: AdministrativeRegistration[] = [
   {
     id: 'reg-001',
-    applicationId: 'app-003',
-    candidateId: 'usr-candidat-3',
+    applicationId: 'app-adm-001',
+    candidateId: 'usr-candidat-admis',
     studentName: 'Salma El Fassi',
     cin: 'CD908123',
     cne: 'N132456789',
@@ -988,7 +1710,7 @@ export const INITIAL_ADMINISTRATIVE_REGISTRATIONS: AdministrativeRegistration[] 
       { id: 'rd-4', label: 'Attestation d\'assurance responsabilité civile étudiant', fileName: 'Attestation_Assurance_2026.pdf', fileUrl: '/api/registrations/reg-001/documents/rd-4/content', status: 'fourni', required: true },
       { id: 'rd-5', label: 'Engagement sur l\'honneur de respect du règlement intérieur', fileName: 'Engagement_Reglement.pdf', fileUrl: '/api/registrations/reg-001/documents/rd-5/content', status: 'fourni', required: true }
     ],
-    notes: 'Dossier physique déposé le 20/10/2026. Contrôle de cohérence avec le dossier Apogée en cours.'
+    notes: 'Dossier physique déposé le 20/10/2026. Contrôle de cohérence avec le dossier administratif en cours.'
   }
 ];
 
@@ -1082,7 +1804,7 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     id: 'notif-1',
     targetRole: 'candidat',
     userId: 'usr-candidat-1',
-    title: 'Convocation à l\'entretien oral de sélection',
+    title: "Convocation à l'entretien oral de sélection",
     message: 'Votre candidature pour le sujet "Architectures d\'Apprentissage Profond..." a été retenue pour l\'audition orale du 12 Novembre 2026 à 09h00.',
     category: 'entretien',
     link: '/candidat/convocation',
@@ -1093,12 +1815,23 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     id: 'notif-2',
     targetRole: 'candidat',
     userId: 'usr-candidat-2',
-    title: 'Demande urgente de correction de dossier',
-    message: 'Votre dossier USMBA-DOC-2026-5120 comporte des pièces non conformes. Vous avez jusqu\'au 15 Novembre 2026 pour soumettre les justificatifs.',
+    title: 'Complément de dossier requis (1 pièce manquante)',
+    message: 'Votre dossier USMBA-DOC-2026-5120 nécessite le dépôt de votre attestation de non-travail.',
     category: 'candidature',
-    link: '/candidat/corrections',
+    link: '/candidat/corrections?appId=app-002',
     isRead: false,
     createdAt: '2026-09-27T10:05:00Z'
+  },
+  {
+    id: 'notif-2b',
+    targetRole: 'candidat',
+    userId: 'usr-candidat-3',
+    title: 'Demande urgente de remplacement de pièce rejetée',
+    message: 'Votre dossier USMBA-DOC-2026-6214 comporte une pièce rejetée (Relevé S4 illisible). Merci de la remplacer avant la date limite.',
+    category: 'candidature',
+    link: '/candidat/corrections?appId=app-003',
+    isRead: false,
+    createdAt: '2026-09-29T14:25:00Z'
   },
   {
     id: 'notif-3',
@@ -1129,13 +1862,13 @@ export const INITIAL_MESSAGES: PlatformMessage[] = [
     senderId: 'usr-admin-1',
     senderName: 'Karim Mansouri (Administration Scolarité)',
     senderRole: 'administration',
-    recipientId: 'usr-candidat-2',
-    recipientName: 'Mehdi Benjelloun',
-    subject: 'Objet : Rectification Relevé de Notes S4 — Dossier USMBA-DOC-2026-5120',
-    content: 'Bonjour M. Benjelloun,\n\nNous avons bien reçu votre dossier de candidature. Toutefois, le document téléversé pour le semestre 4 ne comporte pas le cachet sec de votre faculté d\'origine. Merci de le re-scanner et de le déposer dans votre Espace Corrections avant l\'expiration du délai légal.\n\nCordialement,\nService des Études Doctorales — USMBA Fès',
-    relatedEntityId: 'USMBA-DOC-2026-5120',
+    recipientId: 'usr-candidat-3',
+    recipientName: 'Amine Tazi',
+    subject: 'Objet : Rectification Relevé de Notes S4 — Dossier USMBA-DOC-2026-6214',
+    content: 'Bonjour M. Tazi,\n\nNous avons bien reçu votre dossier de candidature. Toutefois, le document téléversé pour le semestre 4 est illisible et ne comporte pas le cachet officiel de votre établissement. Merci de le re-scanner et de le déposer dans votre Espace Corrections.\n\nCordialement,\nService des Études Doctorales — USMBA Fès',
+    relatedEntityId: 'USMBA-DOC-2026-6214',
     isRead: false,
-    createdAt: '2026-09-27T10:15:00Z'
+    createdAt: '2026-09-29T14:30:00Z'
   }
 ];
 
@@ -1143,7 +1876,7 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
   {
     id: 'log-001',
     userId: 'usr-candidat-1',
-    userName: 'Hajar Amellah',
+    userName: 'Kenza Benali',
     userRole: 'candidat',
     action: 'DÉPÔT_CANDIDATURE',
     entityType: 'candidature',
@@ -1172,7 +1905,7 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
     action: 'PROGRAMMATION_ENTRETIEN',
     entityType: 'entretien',
     entityId: 'slot-001',
-    details: 'Attribution du créneau d\'audition le 12/11/2026 à 09h00 pour la candidate Hajar Amellah. Convocation générée.',
+    details: 'Attribution du créneau d\'audition le 12/11/2026 à 09h00 pour la candidate Kenza Benali. Convocation générée.',
     ipAddress: '10.20.1.18',
     timestamp: '2026-10-02T15:40:00Z'
   },
@@ -1202,10 +1935,10 @@ export const FAQ_DATA: FAQItem[] = [
   {
     id: 'faq-2',
     category: 'candidature',
-    question: 'Combien de sujets de thèse un candidat peut-il choisir ?',
-    answer: 'La réglementation autorise un candidat à déposer un maximum de DEUX (2) dossiers de candidature sur deux sujets distincts au sein des laboratoires de l\'USMBA pour une même session annuelle.',
-    officialRef: 'Règlement Intérieur du CEDoc USMBA 2026',
-    keywords: ['sujets', 'limite', 'candidature', 'choix']
+    question: 'Puis-je postuler à plusieurs sujets simultanément sans ré-importer mes documents ?',
+    answer: 'Oui. Vous pouvez sélectionner plusieurs sujets dans le catalogue et soumettre simultanément des candidatures distinctes. Vos pièces communes (CIN, diplômes, relevés, CV, attestation) sont centralisées dans votre dossier personnel et réutilisées automatiquement.',
+    officialRef: 'Mode démonstration académique GCD USMBA',
+    keywords: ['sujets', 'multi-candidatures', 'réutilisation', 'dossier personnel', 'choix']
   },
   {
     id: 'faq-3',

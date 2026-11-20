@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { storageService } from '../services/storageService';
+import { setInMemorySessionToken } from '../services/authSession';
 
 export interface RegisterPayload extends Partial<User> {
   googleCredential?: string;
@@ -103,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem('gcd_active_user_id');
           setCurrentUser(null);
           setSessionToken(null);
+          setInMemorySessionToken(null);
         }
       } catch {
         // Keep silent if server is temporarily restarting
@@ -145,7 +147,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
       .then((r) => r.json())
       .then((d) => {
-        if (d.sessionToken) setSessionToken(d.sessionToken);
+        if (d.sessionToken) {
+          setSessionToken(d.sessionToken);
+          setInMemorySessionToken(d.sessionToken);
+        }
       })
       .catch(() => undefined);
   };
@@ -166,13 +171,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const role = merged.currentRole || merged.roles[0] || 'candidat';
     setCurrentUser({ ...merged, currentRole: role });
     setCurrentRoleState(role);
-    if (token) setSessionToken(token);
+    if (token) {
+      setSessionToken(token);
+      setInMemorySessionToken(token);
+    }
     localStorage.setItem('gcd_active_user_id', merged.id);
   };
 
   const switchDemoUser = (_userId: string, _role?: UserRole) => {
-    // Disabled intentionally: authentication must pass through Google OAuth server verification
-    console.warn('switchDemoUser est désactivé : utilisez Continuer avec Google (@usmba.ac.ma).');
+    // Redirected to explicit simulation selector or simulated Google picker
+    console.warn('Utilisez le sélecteur de profils de simulation ou « Continuer avec Google » (@usmba.ac.ma).');
   };
 
   const switchRoleQuick = (targetRole: UserRole) => {
@@ -185,7 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = (_email: string, _password?: string) => {
     return {
       success: false,
-      message: 'Veuillez vous authentifier uniquement via « Continuer avec Google » (@usmba.ac.ma).',
+      message: 'Veuillez utiliser le bouton « Continuer avec Google » (@usmba.ac.ma) ou un profil de simulation.',
     };
   };
 
@@ -236,7 +244,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setCurrentUser(newUser);
       setCurrentRoleState('candidat');
-      if (data.sessionToken) setSessionToken(data.sessionToken);
+      if (data.sessionToken) {
+        setSessionToken(data.sessionToken);
+        setInMemorySessionToken(data.sessionToken);
+      }
       localStorage.setItem('gcd_active_user_id', newUser.id);
 
       return {
@@ -257,6 +268,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
     setCurrentRoleState('candidat');
     setSessionToken(null);
+    setInMemorySessionToken(null);
     setUnreadNotificationsCount(0);
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
   };

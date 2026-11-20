@@ -1407,10 +1407,10 @@ export const Register: React.FC = () => {
               <ShieldCheck className="w-6 h-6" />
             </div>
             <h2 className="text-xl font-extrabold text-slate-900">
-              Authentification Google Académique (@usmba.ac.ma)
+              Association d&apos;un compte Google académique (@usmba.ac.ma)
             </h2>
             <p className="text-xs text-slate-500">
-              Associez exclusivement votre compte Google institutionnel <span className="font-mono font-bold">@usmba.ac.ma</span>. La vérification est effectuée directement auprès de Google par le serveur.
+              Mode démonstration académique : sélectionnez un compte simulé se terminant par <span className="font-mono font-bold">@usmba.ac.ma</span> (les domaines externes ou Gmail personnels sont rejetés).
             </p>
           </div>
 
@@ -1480,6 +1480,7 @@ export const Register: React.FC = () => {
                 onSuccess={handleStep5GoogleSuccess}
                 onError={handleStep5GoogleError}
                 disabled={isSubmitting}
+                mode="register"
               />
 
               <div className="flex items-center justify-between pt-2 border-t border-slate-100">

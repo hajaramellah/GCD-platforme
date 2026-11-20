@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ClipboardList,
   Search,
@@ -26,6 +26,7 @@ import {
   downloadProtectedDocument,
   ViewableDocumentInput
 } from '../../services/documentService';
+import { summarizeApplicationDocuments } from '../../utils/documentRequirements';
 
 export const AdminApplicationsQueue: React.FC = () => {
   const { currentUser, currentRole, sessionToken } = useAuth();
@@ -46,15 +47,121 @@ export const AdminApplicationsQueue: React.FC = () => {
   const [reasonDraft, setReasonDraft] = useState<string>('');
   const [pendingDocStatus, setPendingDocStatus] = useState<'rejete' | 'complement_requis'>('rejete');
 
-  // Correction request modal state
+  // Correction request modal & validation error state
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
   const [correctionComment, setCorrectionComment] = useState('');
   const [correctionDeadline, setCorrectionDeadline] = useState('2026-11-20');
   const [selectedDeficientDocs, setSelectedDeficientDocs] = useState<DocumentType[]>([]);
+  const [adminActionError, setAdminActionError] = useState<string | null>(null);
 
   const reloadApplications = () => {
     setApplications(storageService.getApplications());
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncFromBackend = async () => {
+      try {
+        const res = await fetch('/api/applications', {
+          headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : undefined,
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data?.success || !Array.isArray(data.applications)) return;
+
+        const localApps = storageService.getApplications();
+        const localMap = new Map(localApps.map((a) => [a.id, a]));
+        const subjects = storageService.getSubjects();
+        const users = storageService.getUsers();
+        let hasUpdates = false;
+
+        for (const srvApp of data.applications as Partial<CandidateApplication>[]) {
+          if (!srvApp.id) continue;
+          const local = localMap.get(srvApp.id);
+          const subject = subjects.find((s) => s.id === (srvApp.subjectId || local?.subjectId));
+          const candidate = users.find((u) => u.id === (srvApp.candidateId || local?.candidateId));
+
+          if (!local) {
+            const hydrated: CandidateApplication = {
+              referenceNumber: srvApp.referenceNumber || `USMBA-DOC-${srvApp.id}`,
+              candidateId: srvApp.candidateId || candidate?.id || '',
+              candidateName:
+                srvApp.candidateName ||
+                (candidate ? `${candidate.firstName} ${candidate.lastName}` : srvApp.candidateEmail || 'Candidat'),
+              candidateEmail: srvApp.candidateEmail || candidate?.email || '',
+              candidatePhone: srvApp.candidatePhone || candidate?.phone || '',
+              cin: srvApp.cin || candidate?.cin || '',
+              cne: srvApp.cne || candidate?.cne || '',
+              studentOriginType: srvApp.studentOriginType || candidate?.studentOriginType || 'interne_usmba',
+              masterOriginUniversity: srvApp.masterOriginUniversity || candidate?.originEstablishment || 'USMBA Fès',
+              masterSpecialty: srvApp.masterSpecialty || candidate?.masterSpecialty || 'Master',
+              masterGraduationYear: Number(srvApp.masterGraduationYear) || 2026,
+              masterMention: srvApp.masterMention || 'Bien',
+              subjectId: srvApp.subjectId || '',
+              subjectTitle: srvApp.subjectTitle || subject?.title || 'Sujet doctoral',
+              laboratoryId: srvApp.laboratoryId || subject?.laboratoryId || 'lisac',
+              establishmentId: srvApp.establishmentId || subject?.establishmentId || 'fsdm',
+              discipline: srvApp.discipline || subject?.discipline || 'Informatique',
+              supervisorName: srvApp.supervisorName || subject?.supervisorName || 'À désigner',
+              status: (srvApp.status as CandidateApplication['status']) || 'soumise',
+              documents: Array.isArray(srvApp.documents) ? srvApp.documents : [],
+              correctionRequests: Array.isArray(srvApp.correctionRequests) ? srvApp.correctionRequests : [],
+              statusHistory: Array.isArray(srvApp.statusHistory) ? srvApp.statusHistory : [],
+              submittedAt: srvApp.submittedAt || new Date().toISOString(),
+              updatedAt: srvApp.updatedAt || new Date().toISOString(),
+              ...srvApp,
+              id: srvApp.id,
+            };
+            storageService.saveApplication(hydrated, {
+              id: currentUser?.id || 'admin',
+              name: `${currentUser?.firstName || 'Admin'} ${currentUser?.lastName || ''}`.trim(),
+              role: 'administration',
+            });
+            hasUpdates = true;
+          } else if (
+            srvApp.updatedAt &&
+            (!local.updatedAt || new Date(srvApp.updatedAt).getTime() > new Date(local.updatedAt).getTime())
+          ) {
+            const merged: CandidateApplication = {
+              ...local,
+              ...srvApp,
+              candidateName: srvApp.candidateName || local.candidateName,
+              subjectTitle: srvApp.subjectTitle || local.subjectTitle,
+              masterSpecialty: srvApp.masterSpecialty || local.masterSpecialty,
+              masterOriginUniversity: srvApp.masterOriginUniversity || local.masterOriginUniversity,
+              masterMention: srvApp.masterMention || local.masterMention,
+              documents: Array.isArray(srvApp.documents) && srvApp.documents.length > 0 ? srvApp.documents : local.documents,
+              statusHistory:
+                Array.isArray(srvApp.statusHistory) && srvApp.statusHistory.length > 0
+                  ? srvApp.statusHistory
+                  : local.statusHistory,
+              correctionRequests:
+                Array.isArray(srvApp.correctionRequests) && srvApp.correctionRequests.length > 0
+                  ? srvApp.correctionRequests
+                  : local.correctionRequests,
+            };
+            storageService.saveApplication(merged, {
+              id: currentUser?.id || 'admin',
+              name: `${currentUser?.firstName || 'Admin'} ${currentUser?.lastName || ''}`.trim(),
+              role: 'administration',
+            });
+            hasUpdates = true;
+          }
+        }
+
+        if (!cancelled && hasUpdates) {
+          setApplications(storageService.getApplications());
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    };
+    syncFromBackend();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken, currentUser?.id]);
 
   const toViewableAppDoc = (
     app: CandidateApplication,
@@ -163,6 +270,7 @@ export const AdminApplicationsQueue: React.FC = () => {
       });
     }
 
+    setAdminActionError(null);
     setSelectedApp(updatedApp);
     reloadApplications();
     setEditingReasonDocId(null);
@@ -170,7 +278,16 @@ export const AdminApplicationsQueue: React.FC = () => {
   };
 
   // Action: Validate dossier as "Recevable"
-  const handleValidateRecevable = (app: CandidateApplication) => {
+  const handleValidateRecevable = async (app: CandidateApplication) => {
+    const docSummary = summarizeApplicationDocuments(app.documents);
+    if (docSummary.hasIssues) {
+      setAdminActionError(
+        `Validation bloquée : ${docSummary.missingDocs.length} pièce(s) manquante(s), ${docSummary.rejectedDocs.length} rejetée(s) et ${docSummary.complementDocs.length} en complément requis. Veuillez régulariser toutes les pièces avant de déclarer le dossier recevable.`
+      );
+      return;
+    }
+    setAdminActionError(null);
+
     const updated: CandidateApplication = {
       ...app,
       status: 'recevable',
@@ -195,6 +312,20 @@ export const AdminApplicationsQueue: React.FC = () => {
       role: 'administration'
     });
 
+    try {
+      await fetch(`/api/applications/${app.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify(updated),
+      });
+    } catch {
+      // Non-blocking fallback
+    }
+
     storageService.addNotification({
       targetRole: 'candidat',
       userId: app.candidateId,
@@ -209,7 +340,7 @@ export const AdminApplicationsQueue: React.FC = () => {
   };
 
   // Action: Send correction notice
-  const handleSendCorrectionNotice = () => {
+  const handleSendCorrectionNotice = async () => {
     if (!selectedApp) return;
 
     const newCorrection = {
@@ -255,6 +386,20 @@ export const AdminApplicationsQueue: React.FC = () => {
       role: 'administration'
     });
 
+    try {
+      await fetch(`/api/applications/${selectedApp.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify(updated),
+      });
+    } catch {
+      // Non-blocking fallback
+    }
+
     storageService.addNotification({
       targetRole: 'candidat',
       userId: selectedApp.candidateId,
@@ -264,6 +409,7 @@ export const AdminApplicationsQueue: React.FC = () => {
       link: `/candidat/corrections?appId=${selectedApp.id}`
     });
 
+    setAdminActionError(null);
     setCorrectionModalOpen(false);
     setSelectedApp(updated);
     reloadApplications();
@@ -358,11 +504,11 @@ export const AdminApplicationsQueue: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
               {filteredApps.map((app) => {
-                const totalDocs = app.documents.length;
-                const validDocs = app.documents.filter((d) => d.status === 'valide').length;
-                const invalidDocs = app.documents.filter(
-                  (d) => d.status === 'rejete' || d.status === 'manquant' || d.status === 'complement_requis'
-                ).length;
+                const docSummary = summarizeApplicationDocuments(app.documents);
+                const anomalyCount =
+                  docSummary.missingDocs.length +
+                  docSummary.rejectedDocs.length +
+                  docSummary.complementDocs.length;
 
                 return (
                   <tr key={app.id} className="hover:bg-slate-50/70 transition-colors">
@@ -386,16 +532,16 @@ export const AdminApplicationsQueue: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      {invalidDocs > 0 ? (
+                    <td className="py-3.5 px-4 space-y-1">
+                      {anomalyCount > 0 ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
                           <AlertTriangle className="w-3.5 h-3.5" />
-                          {invalidDocs} anomalie(s)
+                          {docSummary.providedRequiredCount}/{docSummary.totalRequired} fournies • {anomalyCount} anomalie(s)
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          {validDocs}/{totalDocs} validées
+                          {docSummary.providedRequiredCount}/{docSummary.totalRequired} fournies ({docSummary.validatedRequiredCount} validées)
                         </span>
                       )}
                     </td>
@@ -412,8 +558,9 @@ export const AdminApplicationsQueue: React.FC = () => {
                         onClick={() => {
                           setSelectedApp(app);
                           setEditingReasonDocId(null);
+                          setAdminActionError(null);
                         }}
-                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs transition-colors shadow-2xs inline-flex items-center gap-1"
+                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs transition-colors shadow-2xs inline-flex items-center gap-1 whitespace-nowrap shrink-0"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Instruire</span>
@@ -475,42 +622,63 @@ export const AdminApplicationsQueue: React.FC = () => {
               </div>
 
               {/* Per-document verification controls */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700">
-                    Contrôle pièce par pièce ({selectedApp.documents.length})
-                  </h4>
-                  <span className="text-slate-400 text-[11px]">
-                    Validation administrative individuelle & provenance
-                  </span>
-                </div>
+              {(() => {
+                const modalSummary = summarizeApplicationDocuments(selectedApp.documents);
+                return (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700">
+                        Contrôle pièce par pièce ({modalSummary.providedRequiredCount}/{modalSummary.totalRequired} fournies • {modalSummary.validatedRequiredCount} validées)
+                      </h4>
+                      <span className="text-slate-400 text-[11px]">
+                        Validation administrative individuelle & provenance
+                      </span>
+                    </div>
 
-                <div className="space-y-2.5">
-                  {selectedApp.documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-bold text-slate-900">{doc.label}</span>
-                            {doc.provenance === 'recupere_administration' ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                                <Building2 className="w-3 h-3" />
-                                Récupéré depuis l&apos;administration {doc.isDemoApogee ? '(Démo APOGÉE)' : ''}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                <UserCheck className="w-3 h-3" />
-                                Fourni par le candidat
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-2">
-                            <span>
-                              Fichier : <span className="font-mono text-slate-700">{doc.fileName || 'Non fourni'}</span>
-                            </span>
+                    {adminActionError && (
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-medium flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                        <span>{adminActionError}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-2.5">
+                      {selectedApp.documents.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className={`p-3.5 rounded-xl border space-y-2.5 ${
+                            doc.status === 'manquant' || doc.status === 'rejete'
+                              ? 'border-rose-200 bg-rose-50/40'
+                              : doc.status === 'complement_requis'
+                              ? 'border-amber-200 bg-amber-50/40'
+                              : 'border-slate-200 bg-slate-50/60'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-slate-900">{doc.label}</span>
+                                {doc.status === 'manquant' && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
+                                    Pièce manquante
+                                  </span>
+                                )}
+                                {doc.provenance === 'recupere_administration' ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                    <Building2 className="w-3 h-3" />
+                                    Récupéré depuis l&apos;administration {doc.isDemoApogee ? '(Démo APOGÉE)' : ''}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <UserCheck className="w-3 h-3" />
+                                    Fourni par le candidat
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-2">
+                                <span>
+                                  Fichier : <span className="font-mono text-slate-700">{doc.fileName || 'Non fourni'}</span>
+                                </span>
                             {(doc.fileName || (doc.fileUrl && doc.fileUrl !== '#')) && (
                               <div className="inline-flex items-center gap-1.5">
                                 <button
@@ -644,8 +812,10 @@ export const AdminApplicationsQueue: React.FC = () => {
                       )}
                     </div>
                   ))}
-                </div>
-              </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Status History */}
               <div className="space-y-2 pt-2 border-t border-slate-100">

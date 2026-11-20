@@ -42,26 +42,32 @@ import {
   INITIAL_CREDIT_RECORDS
 } from '../data/seedData';
 
+import {
+  isCommonDocumentType,
+  isDocumentProvided,
+  summarizeApplicationDocuments
+} from '../utils/documentRequirements';
+
 const STORAGE_KEYS = {
-  USERS: 'gcd_usmba_users_v4',
-  SUBJECTS: 'gcd_usmba_subjects_v4',
-  APPLICATIONS: 'gcd_usmba_applications_v4',
-  INTERVIEWS: 'gcd_usmba_interviews_v4',
-  EVALUATIONS: 'gcd_usmba_evaluations_v4',
-  SELECTION_REPORT: 'gcd_usmba_selection_report_v4',
-  ADMIN_REGISTRATIONS: 'gcd_usmba_admin_registrations_v4',
-  ANNUAL_RE_REGISTRATIONS: 'gcd_usmba_annual_re_registrations_v4',
-  NOTIFICATIONS: 'gcd_usmba_notifications_v4',
-  MESSAGES: 'gcd_usmba_messages_v4',
-  AUDIT_LOGS: 'gcd_usmba_audit_logs_v4',
-  FAQ: 'gcd_usmba_faq_v4',
-  RULES: 'gcd_usmba_rules_v4',
-  CAMPAIGNS: 'gcd_usmba_campaigns_v4',
-  DOCTORAL_TRAININGS: 'gcd_usmba_doctoral_trainings_v4',
-  TRAINING_SESSIONS: 'gcd_usmba_training_sessions_v4',
-  TRAINING_ACTIVITIES: 'gcd_usmba_training_activities_v4',
-  CREDIT_RECORDS: 'gcd_usmba_credit_records_v4',
-  SETTINGS: 'gcd_usmba_settings_v4'
+  USERS: 'gcd_usmba_users_v5',
+  SUBJECTS: 'gcd_usmba_subjects_v5',
+  APPLICATIONS: 'gcd_usmba_applications_v5',
+  INTERVIEWS: 'gcd_usmba_interviews_v5',
+  EVALUATIONS: 'gcd_usmba_evaluations_v5',
+  SELECTION_REPORT: 'gcd_usmba_selection_report_v5',
+  ADMIN_REGISTRATIONS: 'gcd_usmba_admin_registrations_v5',
+  ANNUAL_RE_REGISTRATIONS: 'gcd_usmba_annual_re_registrations_v5',
+  NOTIFICATIONS: 'gcd_usmba_notifications_v5',
+  MESSAGES: 'gcd_usmba_messages_v5',
+  AUDIT_LOGS: 'gcd_usmba_audit_logs_v5',
+  FAQ: 'gcd_usmba_faq_v5',
+  RULES: 'gcd_usmba_rules_v5',
+  CAMPAIGNS: 'gcd_usmba_campaigns_v5',
+  DOCTORAL_TRAININGS: 'gcd_usmba_doctoral_trainings_v5',
+  TRAINING_SESSIONS: 'gcd_usmba_training_sessions_v5',
+  TRAINING_ACTIVITIES: 'gcd_usmba_training_activities_v5',
+  CREDIT_RECORDS: 'gcd_usmba_credit_records_v5',
+  SETTINGS: 'gcd_usmba_settings_v5'
 };
 
 export interface PlatformSettings {
@@ -347,22 +353,12 @@ class StorageService {
     return this.getCandidateApplicationsStrict(candidateId, email, cin)[0];
   }
 
-  // Reusable personal & academic documents across applications (CIN, diplomas, transcripts, CV, attestation)
+  // Centralized Candidate Document Vault (reusable personal & academic common documents across applications)
   public getSharedCandidateDocuments(
     candidateId?: string,
     email?: string,
     cin?: string
   ): Partial<Record<string, any>> {
-    const reusableTypes = new Set([
-      'cin',
-      'bac',
-      'licence',
-      'master',
-      'releves_notes',
-      'cv',
-      'attestation_non_travail',
-      'autorisation_employeur',
-    ]);
     const collected: Record<string, any> = {};
 
     const user =
@@ -375,7 +371,7 @@ class StorageService {
         type: 'cin',
         label: "Carte d'Identité Nationale (CIN)",
         fileName: `CIN_${user.cin || 'Document'}.jpg`,
-        fileSize: Math.round((user.identityDocuments.cinImage.length * 0.75)),
+        fileSize: Math.round(user.identityDocuments.cinImage.length * 0.75),
         fileUrl: user.identityDocuments.cinImage,
         isRequired: true,
         status: 'en_attente',
@@ -384,24 +380,182 @@ class StorageService {
       };
     }
 
+    // Priority 1: Vault documents explicitly stored in user.sharedDocuments (never pull rejected/missing)
     if (user?.sharedDocuments) {
       for (const doc of user.sharedDocuments) {
-        if (reusableTypes.has(doc.type) && doc.fileName) {
+        if (isCommonDocumentType(doc.type) && isDocumentProvided(doc)) {
           collected[doc.type] = doc;
         }
       }
     }
 
-    const apps = this.getCandidateApplicationsStrict(candidateId, email, cin);
+    // Priority 2: Valid/pending common documents from strictly isolated candidate's own applications
+    const apps = this.getCandidateApplicationsStrict(candidateId || user?.id, email || user?.email, cin || user?.cin);
     for (const app of apps) {
       for (const doc of app.documents || []) {
-        if (reusableTypes.has(doc.type) && doc.fileName && doc.status !== 'rejete' && !collected[doc.type]) {
-          collected[doc.type] = doc;
+        if (isCommonDocumentType(doc.type) && isDocumentProvided(doc)) {
+          const existing = collected[doc.type];
+          if (!existing || (existing.status !== 'valide' && doc.status === 'valide')) {
+            collected[doc.type] = doc;
+          }
         }
       }
     }
 
     return collected;
+  }
+
+  // Saves/updates a common document into the candidate's personal vault and optionally syncs open/incomplete applications
+  public saveCandidateSharedDocument(
+    candidateId: string,
+    doc: any,
+    options?: {
+      syncPendingApps?: boolean;
+      actor?: { id: string; name: string; role: UserRole };
+    }
+  ): CandidateApplication[] {
+    if (!isCommonDocumentType(doc.type)) return [];
+
+    const user = this.getUserById(candidateId);
+    if (user) {
+      const existingShared = Array.isArray(user.sharedDocuments) ? [...user.sharedDocuments] : [];
+      const idx = existingShared.findIndex((d) => d.type === doc.type);
+      const normalizedDoc = {
+        ...doc,
+        id: doc.id || `vault-${candidateId}-${doc.type}`,
+        isRequired: true,
+        uploadedAt: doc.uploadedAt || new Date().toISOString(),
+      };
+      if (idx >= 0) {
+        existingShared[idx] = normalizedDoc;
+      } else {
+        existingShared.push(normalizedDoc);
+      }
+      this.saveUser({ ...user, sharedDocuments: existingShared });
+    }
+
+    if (options?.syncPendingApps === false) {
+      return [];
+    }
+
+    const updatedApps: CandidateApplication[] = [];
+    const candidateApps = this.getCandidateApplicationsStrict(candidateId, user?.email, user?.cin);
+    const allApps = this.getApplications();
+
+    for (const app of candidateApps) {
+      const canSyncApp = ['brouillon', 'incomplete', 'correction_demandee', 'soumise', 'corrigee'].includes(app.status);
+      if (!canSyncApp) continue;
+
+      const targetIdx = app.documents.findIndex((d) => d.type === doc.type);
+      const targetDoc = targetIdx >= 0 ? app.documents[targetIdx] : null;
+      const shouldReplaceDoc =
+        !targetDoc ||
+        targetDoc.status === 'manquant' ||
+        targetDoc.status === 'rejete' ||
+        targetDoc.status === 'complement_requis' ||
+        !targetDoc.fileName ||
+        doc.status === 'en_attente';
+
+      if (!shouldReplaceDoc) continue;
+
+      const updatedDocs =
+        targetIdx >= 0
+          ? app.documents.map((d, i) =>
+              i === targetIdx
+                ? {
+                    ...d,
+                    fileName: doc.fileName,
+                    fileSize: doc.fileSize,
+                    fileUrl: doc.fileUrl,
+                    status: doc.status === 'valide' ? 'valide' : 'en_attente',
+                    provenance: doc.provenance || d.provenance || 'fourni_candidat',
+                    rejectionReason: undefined,
+                    uploadedAt: doc.uploadedAt || new Date().toISOString(),
+                  }
+                : d
+            )
+          : [
+              ...app.documents,
+              {
+                ...doc,
+                id: `doc-${app.id}-${doc.type}-${Date.now()}`,
+                rejectionReason: undefined,
+              },
+            ];
+
+      const summary = summarizeApplicationDocuments(updatedDocs as any);
+      let nextStatus = app.status;
+      let nextHistory = [...(app.statusHistory || [])];
+      let nextCorrections = [...(app.correctionRequests || [])];
+
+      if (summary.isComplete && (app.status === 'incomplete' || app.status === 'correction_demandee')) {
+        nextStatus = app.status === 'correction_demandee' ? 'corrigee' : 'soumise';
+        nextCorrections = nextCorrections.map((cr) =>
+          !cr.isResolved ? { ...cr, isResolved: true, resolvedAt: new Date().toISOString() } : cr
+        );
+        nextHistory.push({
+          id: `sh-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          status: nextStatus,
+          comment: `Dossier complété via le coffre personnel (${doc.label}).`,
+          changedBy: options?.actor?.name || app.candidateName,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const updatedApp: CandidateApplication = {
+        ...app,
+        status: nextStatus,
+        documents: updatedDocs as any,
+        correctionRequests: nextCorrections,
+        statusHistory: nextHistory,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const globalIdx = allApps.findIndex((a) => a.id === app.id);
+      if (globalIdx >= 0) {
+        allApps[globalIdx] = updatedApp;
+        updatedApps.push(updatedApp);
+      }
+    }
+
+    if (updatedApps.length > 0) {
+      this.setItem(STORAGE_KEYS.APPLICATIONS, allApps);
+      if (options?.actor) {
+        this.logAction(
+          options.actor,
+          'SYNCHRONISATION_COFFRE_PIECES',
+          'candidature',
+          updatedApps.map((a) => a.referenceNumber).join(', '),
+          `Pièce commune "${doc.label}" mise à jour et synchronisée sur ${updatedApps.length} candidature(s).`
+        );
+      }
+    }
+
+    return updatedApps;
+  }
+
+  public syncApplicationCommonDocsToVault(application: CandidateApplication): void {
+    const user = this.getUserById(application.candidateId);
+    if (!user) return;
+
+    const vaultDocs = Array.isArray(user.sharedDocuments) ? [...user.sharedDocuments] : [];
+    let changed = false;
+
+    for (const doc of application.documents || []) {
+      if (!isCommonDocumentType(doc.type) || !isDocumentProvided(doc)) continue;
+      const idx = vaultDocs.findIndex((vd) => vd.type === doc.type);
+      if (idx === -1) {
+        vaultDocs.push({ ...doc, id: doc.id || `vault-${user.id}-${doc.type}` });
+        changed = true;
+      } else if (!isDocumentProvided(vaultDocs[idx]) || (doc.uploadedAt && (!vaultDocs[idx].uploadedAt || doc.uploadedAt > vaultDocs[idx].uploadedAt!))) {
+        vaultDocs[idx] = { ...doc, id: vaultDocs[idx].id || doc.id };
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.saveUser({ ...user, sharedDocuments: vaultDocs });
+    }
   }
 
   public getApplicationById(id: string): CandidateApplication | undefined {
@@ -423,6 +577,7 @@ class StorageService {
       this.logAction(actor, 'NOUVELLE_CANDIDATURE', 'candidature', application.referenceNumber, `Dossier créé et soumis.`);
     }
     this.setItem(STORAGE_KEYS.APPLICATIONS, applications);
+    this.syncApplicationCommonDocsToVault(application);
   }
 
   // Interview Slots (Activity 15, 16)

@@ -36,7 +36,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' })
     case 'correction_demandee':
       label = 'Correction demandée';
       bgClass = 'bg-rose-50 text-rose-700 border-rose-200';
-      dotClass = 'bg-rose-500 animate-pulse';
+      dotClass = 'bg-rose-500';
       break;
     case 'corrigee':
       label = 'Régularisé / Corrigé';

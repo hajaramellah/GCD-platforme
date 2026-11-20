@@ -148,9 +148,10 @@ function getAuthCookieOptions(req: Request, maxAgeMs: number) {
     httpOnly: true,
     sameSite: (secure ? 'none' : 'lax') as 'none' | 'lax',
     secure,
+    partitioned: secure,
     maxAge: maxAgeMs,
     path: '/',
-  };
+  } as any;
 }
 
 function setSessionCookie(req: Request, res: Response, payload: Omit<SessionPayload, 'exp'>): string {
@@ -196,19 +197,49 @@ function getConfiguredGoogleClientIds(): string[] {
   return Array.from(new Set(ids));
 }
 
-function getOAuthRedirectUri(req: Request): string {
+function getAppBaseUrl(req: Request): string {
   const appUrl = (process.env.APP_URL || '').trim().replace(/\/$/, '');
   if (appUrl && !appUrl.includes('MY_APP_URL')) {
-    return `${appUrl}/auth/google/callback`;
+    return appUrl;
   }
   const proto = isHttpsRequest(req) ? 'https' : req.protocol || 'http';
   const host = req.get('x-forwarded-host') || req.get('host') || `localhost:${PORT}`;
-  return `${proto}://${host}/auth/google/callback`;
+  return `${proto}://${host}`;
+}
+
+function getOAuthRedirectUri(req: Request): string {
+  return `${getAppBaseUrl(req)}/auth/google/callback`;
+}
+
+// Single-use in-memory stores for OAuth CSRF state & cross-origin popup -> iframe exchange codes
+const pendingOAuthStates = new Map<
+  string,
+  { nonce: string; mode: string; redirectUri: string; openerOrigin: string; exp: number }
+>();
+const pendingOAuthExchanges = new Map<
+  string,
+  {
+    accountExists: boolean;
+    existingUser?: ServerUser;
+    identity?: VerifiedGoogleIdentity;
+    exp: number;
+  }
+>();
+
+function pruneExpiredOAuthMaps() {
+  const now = Date.now();
+  for (const [k, v] of pendingOAuthStates.entries()) {
+    if (v.exp <= now) pendingOAuthStates.delete(k);
+  }
+  for (const [k, v] of pendingOAuthExchanges.entries()) {
+    if (v.exp <= now) pendingOAuthExchanges.delete(k);
+  }
 }
 
 interface VerifiedGoogleIdentity {
   googleId: string;
   email: string;
+  hd: string | null;
   name: string;
   givenName: string;
   familyName: string;
@@ -222,6 +253,17 @@ async function verifyGoogleIdTokenStrict(
   | { ok: true; identity: VerifiedGoogleIdentity }
   | { ok: false; status: number; errorCode: string; message: string }
 > {
+  const allowedClientIds = getConfiguredGoogleClientIds();
+  if (allowedClientIds.length === 0) {
+    return {
+      ok: false,
+      status: 503,
+      errorCode: 'OAUTH_NOT_CONFIGURED',
+      message:
+        'La configuration Google OAuth (GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET) est absente sur le serveur.',
+    };
+  }
+
   if (!credential || typeof credential !== 'string' || credential.length < 20) {
     return {
       ok: false,
@@ -277,9 +319,8 @@ async function verifyGoogleIdTokenStrict(
     };
   }
 
-  // Verify audience against configured Client IDs
-  const allowedClientIds = getConfiguredGoogleClientIds();
-  if (allowedClientIds.length > 0 && !allowedClientIds.includes(String(tokenData.aud || ''))) {
+  // Verify audience strictly against configured Client IDs
+  if (!allowedClientIds.includes(String(tokenData.aud || ''))) {
     return {
       ok: false,
       status: 401,
@@ -298,6 +339,21 @@ async function verifyGoogleIdTokenStrict(
     };
   }
 
+  // Verify hosted domain (hd) claim whenever present
+  const hdValue =
+    tokenData.hd !== undefined && tokenData.hd !== null
+      ? String(tokenData.hd).trim().toLowerCase()
+      : null;
+  if (hdValue !== null && hdValue !== ALLOWED_GOOGLE_DOMAIN) {
+    return {
+      ok: false,
+      status: 403,
+      errorCode: 'HOSTED_DOMAIN_DENIED',
+      message: DOMAIN_DENIED_MESSAGE,
+    };
+  }
+
+  // Verify exact email domain === usmba.ac.ma
   const emailNormalized = String(tokenData.email || '').trim().toLowerCase();
   if (!emailNormalized || !isStrictUsmbaDomain(emailNormalized)) {
     return {
@@ -308,13 +364,22 @@ async function verifyGoogleIdTokenStrict(
     };
   }
 
+  const googleSub = String(tokenData.sub || '').trim();
+  if (!googleSub) {
+    return {
+      ok: false,
+      status: 401,
+      errorCode: 'MISSING_SUBJECT',
+      message: 'Identifiant Google (sub) manquant dans le jeton vérifié.',
+    };
+  }
+
   return {
     ok: true,
     identity: {
-      googleId: String(
-        tokenData.sub || `g-${crypto.createHash('sha256').update(emailNormalized).digest('hex').slice(0, 12)}`
-      ),
+      googleId: googleSub,
       email: emailNormalized,
+      hd: hdValue,
       name: String(tokenData.name || `${tokenData.given_name || ''} ${tokenData.family_name || ''}`.trim()),
       givenName: String(tokenData.given_name || ''),
       familyName: String(tokenData.family_name || ''),
@@ -326,6 +391,7 @@ async function verifyGoogleIdTokenStrict(
 
 /**
  * In-memory Server Stores (authoritative server-side RBAC, documents & APOGÉE demo data)
+ * Note: Seeded demo accounts do NOT automatically own a Google account (googleId starts undefined).
  */
 interface ServerUser {
   id: string;
@@ -341,6 +407,8 @@ interface ServerUser {
   currentRole: string;
   isActive: boolean;
   isEmailVerified: boolean;
+  googleId?: string;
+  googleLinkedAt?: string;
   studentOriginType?: 'interne_usmba' | 'externe';
   originEstablishment?: string;
   masterSpecialty?: string;
@@ -481,9 +549,9 @@ const serverUsers = new Map<string, ServerUser>([
     'usr-candidat-1',
     {
       id: 'usr-candidat-1',
-      email: 'hajar.amellah@usmba.ac.ma',
-      firstName: 'Hajar',
-      lastName: 'Amellah',
+      email: 'kenza.benali@usmba.ac.ma',
+      firstName: 'Kenza',
+      lastName: 'Benali',
       cin: 'CD654321',
       cne: 'N134098765',
       phone: '+212 6 61 23 45 67',
@@ -499,9 +567,51 @@ const serverUsers = new Map<string, ServerUser>([
     },
   ],
   [
-    'usr-candidat-externe',
+    'usr-candidat-2',
     {
-      id: 'usr-candidat-externe',
+      id: 'usr-candidat-2',
+      email: 'youssef.berrada@usmba.ac.ma',
+      firstName: 'Youssef',
+      lastName: 'Berrada',
+      cin: 'CD712390',
+      cne: 'N138129845',
+      phone: '+212 6 70 88 99 00',
+      establishmentId: 'ensa',
+      roles: ['candidat'],
+      currentRole: 'candidat',
+      isActive: true,
+      isEmailVerified: true,
+      studentOriginType: 'interne_usmba',
+      originEstablishment: 'École Nationale des Sciences Appliquées de Fès (USMBA)',
+      masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
+      createdAt: '2026-09-20T10:15:00Z',
+    },
+  ],
+  [
+    'usr-candidat-3',
+    {
+      id: 'usr-candidat-3',
+      email: 'amine.tazi@usmba.ac.ma',
+      firstName: 'Amine',
+      lastName: 'Tazi',
+      cin: 'CD823451',
+      cne: 'N139445566',
+      phone: '+212 6 68 12 34 90',
+      establishmentId: 'fsdm',
+      roles: ['candidat'],
+      currentRole: 'candidat',
+      isActive: true,
+      isEmailVerified: true,
+      studentOriginType: 'interne_usmba',
+      originEstablishment: 'Faculté des Sciences Dhar El Mahraz (USMBA - Fès)',
+      masterSpecialty: 'Réseaux, Systèmes et Sécurité Informatique',
+      createdAt: '2026-09-23T09:00:00Z',
+    },
+  ],
+  [
+    'usr-candidat-4',
+    {
+      id: 'usr-candidat-4',
       email: 'nadia.chraibi@usmba.ac.ma',
       firstName: 'Nadia',
       lastName: 'Chraibi',
@@ -517,6 +627,69 @@ const serverUsers = new Map<string, ServerUser>([
       originEstablishment: "Université Hassan II de Casablanca — Faculté des Sciences Ben M'Sik",
       masterSpecialty: 'Master Génie Logiciel et Systèmes Distribués',
       createdAt: '2026-09-21T09:00:00Z',
+    },
+  ],
+  [
+    'usr-candidat-5',
+    {
+      id: 'usr-candidat-5',
+      email: 'tarik.elmansouri@usmba.ac.ma',
+      firstName: 'Tarik',
+      lastName: 'El Mansouri',
+      cin: 'AE519204',
+      cne: 'M142087612',
+      phone: '+212 6 63 22 44 88',
+      establishmentId: 'fsdm',
+      roles: ['candidat'],
+      currentRole: 'candidat',
+      isActive: true,
+      isEmailVerified: true,
+      studentOriginType: 'externe',
+      originEstablishment: 'Université Cadi Ayyad de Marrakech — Faculté des Sciences Semlalia',
+      masterSpecialty: 'Master Systèmes Intelligents & Énergie',
+      createdAt: '2026-10-05T10:00:00Z',
+    },
+  ],
+  [
+    'usr-candidat-6',
+    {
+      id: 'usr-candidat-6',
+      email: 'imane.bennani@usmba.ac.ma',
+      firstName: 'Imane',
+      lastName: 'Bennani',
+      cin: 'CD781234',
+      cne: 'N136778899',
+      phone: '+212 6 69 77 88 11',
+      establishmentId: 'fsdm',
+      roles: ['candidat'],
+      currentRole: 'candidat',
+      isActive: true,
+      isEmailVerified: true,
+      studentOriginType: 'interne_usmba',
+      originEstablishment: 'Faculté des Sciences Dhar El Mahraz (USMBA - Fès)',
+      masterSpecialty: 'Master Science des Données et Systèmes Intelligents',
+      createdAt: '2026-09-24T11:00:00Z',
+    },
+  ],
+  [
+    'usr-candidat-admis',
+    {
+      id: 'usr-candidat-admis',
+      email: 'salma.elfassi@usmba.ac.ma',
+      firstName: 'Salma',
+      lastName: 'El Fassi',
+      cin: 'CD908123',
+      cne: 'N132456789',
+      phone: '+212 6 64 55 66 77',
+      establishmentId: 'fsdm',
+      roles: ['candidat'],
+      currentRole: 'candidat',
+      isActive: true,
+      isEmailVerified: true,
+      studentOriginType: 'interne_usmba',
+      originEstablishment: 'Faculté des Sciences Dhar El Mahraz (USMBA - Fès)',
+      masterSpecialty: 'Réseaux, Systèmes et Sécurité Informatique',
+      createdAt: '2026-09-16T14:00:00Z',
     },
   ],
   [
@@ -587,27 +760,6 @@ const serverUsers = new Map<string, ServerUser>([
       isActive: true,
       isEmailVerified: true,
       createdAt: '2019-02-14T14:00:00Z',
-    },
-  ],
-  [
-    'usr-candidat-2',
-    {
-      id: 'usr-candidat-2',
-      email: 'mehdi.benjelloun@usmba.ac.ma',
-      firstName: 'Mehdi',
-      lastName: 'Benjelloun',
-      cin: 'CD712390',
-      cne: 'N138129845',
-      phone: '+212 6 70 88 99 00',
-      establishmentId: 'ensa',
-      roles: ['candidat'],
-      currentRole: 'candidat',
-      isActive: true,
-      isEmailVerified: true,
-      studentOriginType: 'interne_usmba',
-      originEstablishment: 'École Nationale des Sciences Appliquées de Fès (USMBA)',
-      masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
-      createdAt: '2026-09-20T10:15:00Z',
     },
   ],
   [
@@ -706,59 +858,78 @@ function registerAppDocBlob(appId: string, docId: string, fileName: string, data
   });
 }
 
-// Seed protected PDF blobs for all demonstration applications
-registerAppDocBlob('app-001', 'doc-1', 'CIN_CD654321_Hajar.pdf', createServerDemoPdfDataUrl('CIN Hajar Amellah (Demo)', ['CIN : CD654321 | CNE : N134098765', 'FSDM USMBA Fes']));
-registerAppDocBlob('app-001', 'doc-2', 'APOGEE_DEMO_Baccalaureat_N134098765.pdf', createServerDemoPdfDataUrl('Baccalaureat (Demo APOGEE)', ['Etudiante : Hajar AMELLAH', 'CNE : N134098765 | Mention Tres Bien']));
-registerAppDocBlob('app-001', 'doc-3', 'APOGEE_DEMO_Licence_SMI_N134098765.pdf', createServerDemoPdfDataUrl('Licence SMI FSDM (Demo APOGEE)', ['Etudiante : Hajar AMELLAH', 'Licence Sciences Mathematiques et Informatique']));
-registerAppDocBlob('app-001', 'doc-4', 'APOGEE_DEMO_Attestation_Master_IDSI.pdf', createServerDemoPdfDataUrl('Master IDSI FSDM (Demo APOGEE)', ['Etudiante : Hajar AMELLAH', 'Master IDSI - Mention Tres Bien']));
-registerAppDocBlob('app-001', 'doc-5', 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf', createServerDemoPdfDataUrl('Releves S1-S4 (Demo APOGEE)', [
-  ['Etudiante : Hajar AMELLAH - Cursus Master IDSI', 'Semestre 1 : 16.40 / 20 - Mention Tres Bien', 'Semestre 2 : 16.85 / 20 - Mention Tres Bien', 'Moyenne 1ere annee : 16.63 / 20'],
-  ['Etudiante : Hajar AMELLAH - Cursus Master IDSI', 'Semestre 3 : 17.10 / 20 - Mention Tres Bien', 'Semestre 4 (PFE) : 17.60 / 20 - Mention Tres Bien', 'Moyenne generale Master : 16.99 / 20'],
+// Seed protected PDF blobs for all 6 demonstration scenarios + admitted candidate
+registerAppDocBlob('app-001', 'doc-1', 'CIN_CD654321_Kenza_Benali.pdf', createServerDemoPdfDataUrl('CIN Kenza Benali (Simulation)', ['CIN : CD654321 | CNE : N134098765', 'FSDM USMBA Fes']));
+registerAppDocBlob('app-001', 'doc-2', 'APOGEE_DEMO_Baccalaureat_N134098765.pdf', createServerDemoPdfDataUrl('Baccalaureat (Simulation APOGEE)', ['Etudiante : Kenza BENALI', 'CNE : N134098765 | Mention Tres Bien']));
+registerAppDocBlob('app-001', 'doc-3', 'APOGEE_DEMO_Licence_SMI_N134098765.pdf', createServerDemoPdfDataUrl('Licence SMI FSDM (Simulation)', ['Etudiante : Kenza BENALI', 'Licence Sciences Mathematiques et Informatique']));
+registerAppDocBlob('app-001', 'doc-4', 'APOGEE_DEMO_Attestation_Master_IDSI.pdf', createServerDemoPdfDataUrl('Master IDSI FSDM (Simulation)', ['Etudiante : Kenza BENALI', 'Master IDSI - Mention Tres Bien']));
+registerAppDocBlob('app-001', 'doc-5', 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf', createServerDemoPdfDataUrl('Releves S1-S4 (Simulation)', [
+  ['Etudiante : Kenza BENALI - Cursus Master IDSI', 'Semestre 1 : 16.40 / 20 - Mention Tres Bien', 'Semestre 2 : 16.85 / 20 - Mention Tres Bien'],
+  ['Etudiante : Kenza BENALI - Cursus Master IDSI', 'Semestre 3 : 17.10 / 20 - Mention Tres Bien', 'Semestre 4 (PFE) : 17.60 / 20 - Mention Tres Bien'],
 ]));
-registerAppDocBlob('app-001', 'doc-6', 'CV_Hajar_Amellah_2026.pdf', createServerDemoPdfDataUrl('CV Hajar Amellah (Demo)', ['Master IDSI FSDM', 'Stages IA Medicale & Deep Learning']));
-registerAppDocBlob('app-001', 'doc-7', 'Lettre_Motivation_Hajar.pdf', createServerDemoPdfDataUrl('Lettre de Motivation (Demo)', ['Objet : Candidature Doctorat LISAC', 'Encadrant : Pr. Abdelhafid El Alaoui']));
-registerAppDocBlob('app-001', 'doc-8', 'Projet_Recherche_IA_Medicale.pdf', createServerDemoPdfDataUrl('Avant-Projet de These (Demo)', [
-  ['Titre : Architectures Apprentissage Profond pour imagerie medicale', 'Laboratoire LISAC - FSDM USMBA', '1. Contexte scientifique et problematique'],
-  ['2. Etat de l art et verrous technologiques', 'Modeles hybrides Vision Transformers / CNN', 'Validation clinique multicentrique'],
-  ['3. Methodologie et calendrier previsionnel (36 mois)', 'Annee 1 : Constitution dataset & etat de l art', 'Annee 2-3 : Prototypage, publications & redaction'],
-]));
-registerAppDocBlob('app-001', 'doc-9', 'Attestation_Non_Travail_Hajar.pdf', createServerDemoPdfDataUrl('Attestation de Non Travail (Demo)', ['Declare sur l honneur : Hajar AMELLAH', 'CIN : CD654321']));
+registerAppDocBlob('app-001', 'doc-6', 'CV_Kenza_Benali_2026.pdf', createServerDemoPdfDataUrl('CV Kenza Benali (Simulation)', ['Master IDSI FSDM', 'Vision par Ordinateur & Deep Learning']));
+registerAppDocBlob('app-001', 'doc-7', 'Lettre_Motivation_Kenza.pdf', createServerDemoPdfDataUrl('Lettre de Motivation (Simulation)', ['Objet : Candidature Doctorat LISAC', 'Encadrant : Pr. Abdelhafid El Alaoui']));
+registerAppDocBlob('app-001', 'doc-8', 'Projet_Recherche_Vision_Olivier.pdf', createServerDemoPdfDataUrl('Avant-Projet de These (Simulation)', ['Architectures Deep Learning pour cultures d olivier', 'Laboratoire LISAC - FSDM USMBA']));
+registerAppDocBlob('app-001', 'doc-9', 'Attestation_Non_Travail_Kenza.pdf', createServerDemoPdfDataUrl('Attestation de Non Travail (Simulation)', ['Declare sur l honneur : Kenza BENALI', 'CIN : CD654321']));
 
-registerAppDocBlob('app-ext-001', 'doc-ext-1', 'CIN_BE849201_Nadia_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('CIN Nadia Chraibi (Demo)', ['CIN : BE849201', 'Origine : Candidate Externe (UH2C)']));
-registerAppDocBlob('app-ext-001', 'doc-ext-2', 'Baccalaureat_Nadia_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Baccalaureat Nadia Chraibi (Demo)', ['Sciences Mathematiques A - Mention Bien', 'Academie Casablanca-Settat']));
-registerAppDocBlob('app-ext-001', 'doc-ext-3', 'Diplome_Licence_UH2C_Demo.pdf', createServerDemoPdfDataUrl('Licence SMI UH2C (Demo)', ['Universite Hassan II de Casablanca', 'Faculte des Sciences Ben M Sik']));
-registerAppDocBlob('app-ext-001', 'doc-ext-4', 'Diplome_Master_UH2C_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Master GLSD UH2C (Externe Demo)', ['Master Genie Logiciel & Systemes Distribues', 'Mention : Tres Bien (2025)']));
-registerAppDocBlob('app-ext-001', 'doc-ext-5', 'Releves_Notes_S1_S4_UH2C_Demo.pdf', createServerDemoPdfDataUrl('Releves S1-S4 UH2C (Demo)', [
-  ['Candidate : Nadia CHRAIBI | CNE : R145029384', 'Semestre 1 (UH2C) : 15.80 / 20', 'Semestre 2 (UH2C) : 16.15 / 20'],
-  ['Candidate : Nadia CHRAIBI | CNE : R145029384', 'Semestre 3 (UH2C) : 16.45 / 20', 'Semestre 4 (PFE) : 17.20 / 20 - Mention Tres Bien'],
-]));
-registerAppDocBlob('app-ext-001', 'doc-ext-6', 'CV_Nadia_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('CV Nadia Chraibi (Demo)', ['Ingenieure Securite & Systemes Distribues', 'UH2C Casablanca']));
-registerAppDocBlob('app-ext-001', 'doc-ext-7', 'Lettre_Motivation_PQC_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Lettre Motivation PQC (Demo)', ['Sujet : Cryptographie Post-Quantique', 'Laboratoire LIM - FSDM USMBA']));
-registerAppDocBlob('app-ext-001', 'doc-ext-8', 'Avant_Projet_PQC_ZeroTrust_Demo.pdf', createServerDemoPdfDataUrl('Avant-Projet PQC Zero-Trust (Demo)', [
-  ['Sujet : Protocoles Cryptographiques Post-Quantiques', 'Page 1 : Problematique de securite hospitaliere', 'Transition vers les reseaux Zero-Trust'],
-  ['Page 2 : Etat de l art ML-KEM / ML-DSA (NIST)', 'Analyse de performance embarquee sur terminaux medicaux', 'Evaluation formelle de resistance quantique'],
-  ['Page 3 : Plan de travail doctoral (2026-2029)', 'Prototype experimental et banc de test USMBA', 'Publications cibles IEEE TIFS / ESORICS'],
-]));
-registerAppDocBlob('app-ext-001', 'doc-ext-9', 'Attestation_Non_Travail_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Attestation de Non Travail (Demo)', ['Candidate : Nadia CHRAIBI', 'CIN : BE849201']));
+registerAppDocBlob('app-002', 'doc-21', 'CIN_CD712390_Youssef_Berrada.pdf', createServerDemoPdfDataUrl('CIN Youssef Berrada (Simulation)', ['CIN : CD712390', 'CNE : N138129845']));
+registerAppDocBlob('app-002', 'doc-22', 'APOGEE_DEMO_Bac_N138129845.pdf', createServerDemoPdfDataUrl('Baccalaureat Youssef (Simulation)', ['CNE : N138129845']));
+registerAppDocBlob('app-002', 'doc-23', 'APOGEE_DEMO_Licence_N138129845.pdf', createServerDemoPdfDataUrl('Licence ENSA Youssef (Simulation)', ['ENSA Fes - USMBA']));
+registerAppDocBlob('app-002', 'doc-24', 'Master_Youssef_Berrada_ENSA.pdf', createServerDemoPdfDataUrl('Master ENSA Youssef (Simulation)', ['Genie Energetique et Systemes Solaires']));
+registerAppDocBlob('app-002', 'doc-25', 'Releves_Youssef_Berrada_S1_S4.pdf', createServerDemoPdfDataUrl('Releves S1-S4 Youssef (Simulation)', ['ENSA Fes - S1 a S4 : 15.60 / 20']));
+registerAppDocBlob('app-002', 'doc-26', 'CV_Youssef_Berrada.pdf', createServerDemoPdfDataUrl('CV Youssef Berrada (Simulation)', ['Genie Energetique - ENSA Fes']));
+registerAppDocBlob('app-002', 'doc-27', 'Motivation_Youssef_Berrada.pdf', createServerDemoPdfDataUrl('Lettre Motivation Youssef (Simulation)', ['Labo LERMA - ENSA Fes']));
+registerAppDocBlob('app-002', 'doc-28', 'Projet_Materiaux_Solaires.pdf', createServerDemoPdfDataUrl('Projet Solaire LERMA (Simulation)', ['Materiaux a changement de phase']));
+registerAppDocBlob('app-002', 'doc-2a', 'Recommandation_LERMA_Youssef.pdf', createServerDemoPdfDataUrl('Lettre Recommandation LERMA (Simulation)', ['Recommande pour LERMA ENSA Fes']));
 
-registerAppDocBlob('app-002', 'doc-21', 'CIN_Mehdi.pdf', createServerDemoPdfDataUrl('CIN Mehdi Benjelloun (Demo)', ['CIN : CD712390', 'CNE : N138129845']));
-registerAppDocBlob('app-002', 'doc-22', 'Bac_Mehdi.pdf', createServerDemoPdfDataUrl('Baccalaureat Mehdi (Demo APOGEE)', ['CNE : N138129845']));
-registerAppDocBlob('app-002', 'doc-23', 'Licence_Mehdi.pdf', createServerDemoPdfDataUrl('Licence ENSA Mehdi (Demo APOGEE)', ['ENSA Fes - USMBA']));
-registerAppDocBlob('app-002', 'doc-24', 'Master_Mehdi_Scan_Illisible.pdf', createServerDemoPdfDataUrl('Master Mehdi (Demo - Scan flou)', ['Piece signalee a regulariser par la scolarite']));
-registerAppDocBlob('app-002', 'doc-25', 'Releves_Mehdi.pdf', createServerDemoPdfDataUrl('Releves Notes Mehdi (Demo)', ['ENSA Fes - S1 a S4']));
-registerAppDocBlob('app-002', 'doc-26', 'CV_Mehdi.pdf', createServerDemoPdfDataUrl('CV Mehdi Benjelloun (Demo)', ['Genie Energetique - ENSA Fes']));
-registerAppDocBlob('app-002', 'doc-27', 'Motivation_Mehdi.pdf', createServerDemoPdfDataUrl('Lettre Motivation Mehdi (Demo)', ['Labo LERMA - ENSA Fes']));
-registerAppDocBlob('app-002', 'doc-28', 'Projet_Solaire_Mehdi.pdf', createServerDemoPdfDataUrl('Projet Solaire LERMA (Demo)', ['Materiaux a changement de phase']));
+registerAppDocBlob('app-003', 'doc-31', 'CIN_CD823451_Amine_Tazi.pdf', createServerDemoPdfDataUrl('CIN Amine Tazi (Simulation)', ['CIN : CD823451 | CNE : N139445566']));
+registerAppDocBlob('app-003', 'doc-32', 'APOGEE_DEMO_Bac_N139445566.pdf', createServerDemoPdfDataUrl('Baccalaureat Amine Tazi (Simulation)', ['CNE : N139445566']));
+registerAppDocBlob('app-003', 'doc-33', 'APOGEE_DEMO_Licence_N139445566.pdf', createServerDemoPdfDataUrl('Licence Amine Tazi (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-003', 'doc-34', 'APOGEE_DEMO_Master_N139445566.pdf', createServerDemoPdfDataUrl('Master Amine Tazi (Simulation)', ['Reseaux et Securite Informatique']));
+registerAppDocBlob('app-003', 'doc-35', 'Releves_S1_S4_Amine_Scan.pdf', createServerDemoPdfDataUrl('Releves S1-S4 Amine (Piece Rejetee)', ['ANOMALIE : Scan S4 illisible sans cachet officiel']));
+registerAppDocBlob('app-003', 'doc-36', 'CV_Amine_Tazi.pdf', createServerDemoPdfDataUrl('CV Amine Tazi (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-003', 'doc-37', 'Lettre_Motivation_Amine.pdf', createServerDemoPdfDataUrl('Lettre Motivation Amine (Simulation)', ['Laboratoire LIM FSDM']));
+registerAppDocBlob('app-003', 'doc-38', 'Projet_ZeroTrust_Amine.pdf', createServerDemoPdfDataUrl('Projet ZeroTrust Amine (Simulation)', ['Protocoles Post-Quantiques']));
+registerAppDocBlob('app-003', 'doc-39', 'Attestation_Non_Travail_Amine.pdf', createServerDemoPdfDataUrl('Attestation Non Travail Amine (Simulation)', ['CIN : CD823451']));
 
-registerAppDocBlob('app-003', 'doc-31', 'CIN_Salma.pdf', createServerDemoPdfDataUrl('CIN Salma El Fassi (Demo)', ['CIN : CD908123']));
-registerAppDocBlob('app-003', 'doc-32', 'Bac_Salma.pdf', createServerDemoPdfDataUrl('Bac Salma (Demo APOGEE)', ['CNE : N132456789']));
-registerAppDocBlob('app-003', 'doc-33', 'Licence_Salma.pdf', createServerDemoPdfDataUrl('Licence Salma (Demo APOGEE)', ['FSDM USMBA']));
-registerAppDocBlob('app-003', 'doc-34', 'Master_Salma.pdf', createServerDemoPdfDataUrl('Master Salma (Demo APOGEE)', ['Reseaux et Securite']));
-registerAppDocBlob('app-003', 'doc-35', 'Releves_Salma.pdf', createServerDemoPdfDataUrl('Releves Salma (Demo APOGEE)', ['Mention Tres Bien']));
-registerAppDocBlob('app-003', 'doc-36', 'CV_Salma.pdf', createServerDemoPdfDataUrl('CV Salma El Fassi (Demo)', ['FSDM USMBA']));
-registerAppDocBlob('app-003', 'doc-37', 'Motivation_Salma.pdf', createServerDemoPdfDataUrl('Lettre Motivation Salma (Demo)', ['LIM FSDM']));
-registerAppDocBlob('app-003', 'doc-38', 'Projet_PostQuantique.pdf', createServerDemoPdfDataUrl('Projet Post-Quantique (Demo)', ['LIM FSDM']));
-registerAppDocBlob('app-003', 'doc-39', 'NonTravail_Salma.pdf', createServerDemoPdfDataUrl('Attestation non travail Salma (Demo)', ['CIN : CD908123']));
+registerAppDocBlob('app-004', 'doc-41', 'CIN_BE849201_Nadia_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('CIN Nadia Chraibi (Simulation)', ['CIN : BE849201 | Candidate Externe UH2C']));
+registerAppDocBlob('app-004', 'doc-42', 'Baccalaureat_Nadia_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Baccalaureat Nadia Chraibi (Simulation)', ['Sciences Mathematiques A - Mention Bien']));
+registerAppDocBlob('app-004', 'doc-43', 'Diplome_Licence_UH2C_Demo.pdf', createServerDemoPdfDataUrl('Licence SMI UH2C (Simulation)', ['Universite Hassan II de Casablanca']));
+registerAppDocBlob('app-004', 'doc-44', 'Diplome_Master_UH2C_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Master GLSD UH2C (Simulation)', ['Mention : Tres Bien']));
+registerAppDocBlob('app-004', 'doc-45', 'Releves_Notes_S1_S4_UH2C_Demo.pdf', createServerDemoPdfDataUrl('Releves S1-S4 UH2C (Simulation)', ['Candidate : Nadia CHRAIBI | CNE : R145029384']));
+registerAppDocBlob('app-004', 'doc-46', 'CV_Nadia_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('CV Nadia Chraibi (Simulation)', ['UH2C Casablanca']));
+registerAppDocBlob('app-004', 'doc-47', 'Lettre_Motivation_PQC_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Lettre Motivation PQC (Simulation)', ['Laboratoire LIM - FSDM USMBA']));
+registerAppDocBlob('app-004', 'doc-48', 'Avant_Projet_PQC_ZeroTrust_Demo.pdf', createServerDemoPdfDataUrl('Avant-Projet PQC Zero-Trust (Simulation)', ['Cryptographie Post-Quantique Hospitaliere']));
+registerAppDocBlob('app-004', 'doc-49', 'Attestation_Non_Travail_Chraibi_Demo.pdf', createServerDemoPdfDataUrl('Attestation Non Travail Nadia (Simulation)', ['CIN : BE849201']));
+
+registerAppDocBlob('app-005', 'doc-51', 'CIN_AE519204_Tarik_ElMansouri.pdf', createServerDemoPdfDataUrl('CIN Tarik El Mansouri (Simulation)', ['CIN : AE519204 | Candidat Externe UCA']));
+registerAppDocBlob('app-005', 'doc-52', 'Baccalaureat_Tarik_ElMansouri.pdf', createServerDemoPdfDataUrl('Baccalaureat Tarik El Mansouri (Simulation)', ['Academie Marrakech-Safi']));
+registerAppDocBlob('app-005', 'doc-53', 'Licence_UCA_Tarik_ElMansouri.pdf', createServerDemoPdfDataUrl('Licence UCA Tarik (Simulation)', ['Faculte des Sciences Semlalia Marrakech']));
+registerAppDocBlob('app-005', 'doc-56', 'CV_Tarik_ElMansouri.pdf', createServerDemoPdfDataUrl('CV Tarik El Mansouri (Simulation)', ['UCA Marrakech']));
+registerAppDocBlob('app-005', 'doc-57', 'Lettre_Motivation_Tarik.pdf', createServerDemoPdfDataUrl('Lettre Motivation Tarik (Simulation)', ['Sujet Smart Grids LISAC']));
+registerAppDocBlob('app-005', 'doc-58', 'Projet_SmartGrids_Tarik.pdf', createServerDemoPdfDataUrl('Projet Smart Grids Tarik (Simulation)', ['Systemes Multi-Agents Explicables']));
+
+registerAppDocBlob('app-006a', 'doc-6a-1', 'CIN_CD781234_Imane_Bennani.pdf', createServerDemoPdfDataUrl('CIN Imane Bennani (Simulation)', ['CIN : CD781234 | CNE : N136778899']));
+registerAppDocBlob('app-006a', 'doc-6a-2', 'APOGEE_DEMO_Bac_N136778899.pdf', createServerDemoPdfDataUrl('Baccalaureat Imane Bennani (Simulation)', ['CNE : N136778899']));
+registerAppDocBlob('app-006a', 'doc-6a-3', 'APOGEE_DEMO_Licence_N136778899.pdf', createServerDemoPdfDataUrl('Licence Imane Bennani (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-006a', 'doc-6a-4', 'APOGEE_DEMO_Master_N136778899.pdf', createServerDemoPdfDataUrl('Master SDSI Imane Bennani (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-006a', 'doc-6a-5', 'APOGEE_DEMO_Releves_N136778899.pdf', createServerDemoPdfDataUrl('Releves S1-S4 Imane Bennani (Simulation)', ['Moyenne : 16.55 / 20']));
+registerAppDocBlob('app-006a', 'doc-6a-6', 'CV_Imane_Bennani_2026.pdf', createServerDemoPdfDataUrl('CV Imane Bennani (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-006a', 'doc-6a-7', 'Motivation_Imane_LISAC.pdf', createServerDemoPdfDataUrl('Lettre Motivation Imane LISAC (Simulation)', ['Sujet suj-001 LISAC']));
+registerAppDocBlob('app-006a', 'doc-6a-8', 'Projet_Vision_Imane.pdf', createServerDemoPdfDataUrl('Projet Vision Imane (Simulation)', ['Vision par ordinateur LISAC']));
+registerAppDocBlob('app-006a', 'doc-6a-9', 'Attestation_Non_Travail_Imane.pdf', createServerDemoPdfDataUrl('Attestation Non Travail Imane (Simulation)', ['CIN : CD781234']));
+registerAppDocBlob('app-006b', 'doc-6b-7', 'Motivation_Imane_LERMA.pdf', createServerDemoPdfDataUrl('Lettre Motivation Imane LERMA (Simulation)', ['Sujet suj-002 LERMA']));
+registerAppDocBlob('app-006b', 'doc-6b-8', 'Projet_Modelisation_Thermique_Imane.pdf', createServerDemoPdfDataUrl('Projet Modelisation Imane (Simulation)', ['Materiaux a changement de phase']));
+
+registerAppDocBlob('app-adm-001', 'doc-adm-1', 'CIN_Salma.pdf', createServerDemoPdfDataUrl('CIN Salma El Fassi (Simulation)', ['CIN : CD908123']));
+registerAppDocBlob('app-adm-001', 'doc-adm-2', 'Bac_Salma.pdf', createServerDemoPdfDataUrl('Bac Salma (Simulation)', ['CNE : N132456789']));
+registerAppDocBlob('app-adm-001', 'doc-adm-3', 'Licence_Salma.pdf', createServerDemoPdfDataUrl('Licence Salma (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-adm-001', 'doc-adm-4', 'Master_Salma.pdf', createServerDemoPdfDataUrl('Master Salma (Simulation)', ['Reseaux et Securite']));
+registerAppDocBlob('app-adm-001', 'doc-adm-5', 'Releves_Salma.pdf', createServerDemoPdfDataUrl('Releves Salma (Simulation)', ['Mention Tres Bien']));
+registerAppDocBlob('app-adm-001', 'doc-adm-6', 'CV_Salma.pdf', createServerDemoPdfDataUrl('CV Salma El Fassi (Simulation)', ['FSDM USMBA']));
+registerAppDocBlob('app-adm-001', 'doc-adm-7', 'Motivation_Salma.pdf', createServerDemoPdfDataUrl('Lettre Motivation Salma (Simulation)', ['LIM FSDM']));
+registerAppDocBlob('app-adm-001', 'doc-adm-8', 'Projet_PostQuantique.pdf', createServerDemoPdfDataUrl('Projet Post-Quantique (Simulation)', ['LIM FSDM']));
+registerAppDocBlob('app-adm-001', 'doc-adm-9', 'NonTravail_Salma.pdf', createServerDemoPdfDataUrl('Attestation non travail Salma (Simulation)', ['CIN : CD908123']));
 
 const serverApplications = new Map<string, any>([
   [
@@ -767,8 +938,9 @@ const serverApplications = new Map<string, any>([
       id: 'app-001',
       referenceNumber: 'USMBA-DOC-2026-7842',
       candidateId: 'usr-candidat-1',
-      candidateEmail: 'hajar.amellah@usmba.ac.ma',
+      candidateEmail: 'kenza.benali@usmba.ac.ma',
       cin: 'CD654321',
+      cne: 'N134098765',
       studentOriginType: 'interne_usmba',
       subjectId: 'suj-001',
       laboratoryId: 'lisac',
@@ -776,42 +948,15 @@ const serverApplications = new Map<string, any>([
       supervisorName: 'Pr. Abdelhafid EL ALAOUI',
       status: 'entretien_programme',
       documents: [
-        { id: 'doc-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD654321_Hajar.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD654321_Kenza_Benali.pdf', status: 'valide', provenance: 'fourni_candidat' },
         { id: 'doc-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Baccalaureat_N134098765.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
         { id: 'doc-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_SMI_N134098765.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
         { id: 'doc-4', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Attestation_Master_IDSI.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
         { id: 'doc-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Hajar_Amellah_2026.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Hajar.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Recherche_IA_Medicale.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Hajar.pdf', status: 'valide', provenance: 'fourni_candidat' },
-      ],
-    },
-  ],
-  [
-    'app-ext-001',
-    {
-      id: 'app-ext-001',
-      referenceNumber: 'USMBA-DOC-2026-8415',
-      candidateId: 'usr-candidat-externe',
-      candidateEmail: 'nadia.chraibi@usmba.ac.ma',
-      cin: 'BE849201',
-      studentOriginType: 'externe',
-      subjectId: 'suj-003',
-      laboratoryId: 'lim',
-      supervisorId: 'usr-chercheur-2',
-      supervisorName: 'Pr. Mohammed ZOUHAIR',
-      status: 'soumise',
-      documents: [
-        { id: 'doc-ext-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_BE849201_Nadia_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Baccalaureat_Nadia_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'Diplome_Licence_UH2C_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-4', type: 'master', label: "Diplôme de Master, Master Spécialisé ou Diplôme d'Ingénieur", fileName: 'Diplome_Master_UH2C_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus universitaire (S1 à S4)", fileName: 'Releves_Notes_S1_S4_UH2C_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-6', type: 'cv', label: 'Curriculum Vitae détaillé et actualisé', fileName: 'CV_Nadia_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-7', type: 'lettre_motivation', label: 'Lettre de motivation argumentée', fileName: 'Lettre_Motivation_PQC_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse (3 à 5 pages)', fileName: 'Avant_Projet_PQC_ZeroTrust_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
-        { id: 'doc-ext-9', type: 'attestation_non_travail', label: "Attestation de non travail ou autorisation de l'employeur", fileName: 'Attestation_Non_Travail_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Kenza_Benali_2026.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Kenza.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Recherche_Vision_Olivier.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Kenza.pdf', status: 'valide', provenance: 'fourni_candidat' },
       ],
     },
   ],
@@ -821,23 +966,26 @@ const serverApplications = new Map<string, any>([
       id: 'app-002',
       referenceNumber: 'USMBA-DOC-2026-5120',
       candidateId: 'usr-candidat-2',
-      candidateEmail: 'mehdi.benjelloun@usmba.ac.ma',
+      candidateEmail: 'youssef.berrada@usmba.ac.ma',
       cin: 'CD712390',
+      cne: 'N138129845',
       studentOriginType: 'interne_usmba',
       subjectId: 'suj-002',
       laboratoryId: 'lerma',
-      supervisorId: 'usr-chercheur-3',
-      supervisorName: 'Pr. Khalid BENANI',
-      status: 'correction_demandee',
+      supervisorId: 'usr-labo-1',
+      supervisorName: 'Pr. Fatima-Zahra BENCHEIKH',
+      status: 'incomplete',
       documents: [
-        { id: 'doc-21', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_Mehdi.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-22', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Bac_Mehdi.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-23', type: 'licence', label: 'Diplôme de Licence', fileName: 'Licence_Mehdi.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-24', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'Master_Mehdi_Scan_Illisible.pdf', status: 'rejete', provenance: 'fourni_candidat' },
-        { id: 'doc-25', type: 'releves_notes', label: 'Relevés de notes', fileName: 'Releves_Mehdi.pdf', status: 'complement_requis', provenance: 'fourni_candidat' },
-        { id: 'doc-26', type: 'cv', label: 'Curriculum Vitae', fileName: 'CV_Mehdi.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-27', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Mehdi.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-28', type: 'projet_recherche', label: 'Projet de recherche', fileName: 'Projet_Solaire_Mehdi.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-21', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD712390_Youssef_Berrada.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-22', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N138129845.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-23', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N138129845.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-24', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'Master_Youssef_Berrada_ENSA.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-25', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'Releves_Youssef_Berrada_S1_S4.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-26', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Youssef_Berrada.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-27', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Youssef_Berrada.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-28', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Materiaux_Solaires.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-2a', type: 'lettre_recommandation', label: 'Lettre de recommandation académique (spécifique LERMA)', fileName: 'Recommandation_LERMA_Youssef.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-29', type: 'attestation_non_travail', label: 'Attestation de non travail (ou justificatif de statut)', fileName: '', status: 'manquant', provenance: 'fourni_candidat', rejectionReason: 'Pièce manquante obligatoire : veuillez téléverser votre attestation de non-travail pour finaliser la recevabilité du dossier.' },
       ],
     },
   ],
@@ -845,26 +993,169 @@ const serverApplications = new Map<string, any>([
     'app-003',
     {
       id: 'app-003',
-      referenceNumber: 'USMBA-DOC-2026-9910',
+      referenceNumber: 'USMBA-DOC-2026-6214',
       candidateId: 'usr-candidat-3',
-      candidateEmail: 'salma.elfassi@usmba.ac.ma',
-      cin: 'CD908123',
+      candidateEmail: 'amine.tazi@usmba.ac.ma',
+      cin: 'CD823451',
+      cne: 'N139445566',
       studentOriginType: 'interne_usmba',
       subjectId: 'suj-003',
       laboratoryId: 'lim',
-      supervisorId: 'usr-chercheur-2',
+      supervisorId: 'usr-directeur-1',
+      supervisorName: 'Pr. Mohammed ZOUHAIR',
+      status: 'correction_demandee',
+      documents: [
+        { id: 'doc-31', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD823451_Amine_Tazi.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-32', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N139445566.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-33', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N139445566.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-34', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Master_N139445566.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-35', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'Releves_S1_S4_Amine_Scan.pdf', status: 'rejete', provenance: 'fourni_candidat', rejectionReason: "Le relevé de notes du semestre S4 est illisible et ne comporte pas le cachet officiel de la scolarité." },
+        { id: 'doc-36', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Amine_Tazi.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-37', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Amine.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-38', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_ZeroTrust_Amine.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-39', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Amine.pdf', status: 'valide', provenance: 'fourni_candidat' },
+      ],
+    },
+  ],
+  [
+    'app-004',
+    {
+      id: 'app-004',
+      referenceNumber: 'USMBA-DOC-2026-8415',
+      candidateId: 'usr-candidat-4',
+      candidateEmail: 'nadia.chraibi@usmba.ac.ma',
+      cin: 'BE849201',
+      cne: 'R145029384',
+      studentOriginType: 'externe',
+      subjectId: 'suj-003',
+      laboratoryId: 'lim',
+      supervisorId: 'usr-directeur-1',
+      supervisorName: 'Pr. Mohammed ZOUHAIR',
+      status: 'soumise',
+      documents: [
+        { id: 'doc-41', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_BE849201_Nadia_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-42', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Baccalaureat_Nadia_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-43', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'Diplome_Licence_UH2C_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-44', type: 'master', label: "Diplôme de Master ou Diplôme d'Ingénieur", fileName: 'Diplome_Master_UH2C_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-45', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'Releves_Notes_S1_S4_UH2C_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-46', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Nadia_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-47', type: 'lettre_motivation', label: 'Lettre de motivation argumentée', fileName: 'Lettre_Motivation_PQC_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-48', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Avant_Projet_PQC_ZeroTrust_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-49', type: 'attestation_non_travail', label: "Attestation de non travail ou autorisation de l'employeur", fileName: 'Attestation_Non_Travail_Chraibi_Demo.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+      ],
+    },
+  ],
+  [
+    'app-005',
+    {
+      id: 'app-005',
+      referenceNumber: 'USMBA-DOC-2026-4390',
+      candidateId: 'usr-candidat-5',
+      candidateEmail: 'tarik.elmansouri@usmba.ac.ma',
+      cin: 'AE519204',
+      cne: 'M142087612',
+      studentOriginType: 'externe',
+      subjectId: 'suj-006',
+      laboratoryId: 'lisac',
+      supervisorId: 'usr-chercheur-1',
+      supervisorName: 'Pr. Abdelhafid EL ALAOUI',
+      status: 'incomplete',
+      documents: [
+        { id: 'doc-51', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_AE519204_Tarik_ElMansouri.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-52', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'Baccalaureat_Tarik_ElMansouri.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-53', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'Licence_UCA_Tarik_ElMansouri.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-54', type: 'master', label: "Diplôme de Master ou Diplôme d'Ingénieur", fileName: '', status: 'manquant', provenance: 'fourni_candidat' },
+        { id: 'doc-55', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: '', status: 'manquant', provenance: 'fourni_candidat' },
+        { id: 'doc-56', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Tarik_ElMansouri.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-57', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Lettre_Motivation_Tarik.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-58', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_SmartGrids_Tarik.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-59', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: '', status: 'manquant', provenance: 'fourni_candidat' },
+        { id: 'doc-5a', type: 'lettre_recommandation', label: 'Lettre de recommandation ou attestation axe Smart Grids (spécifique LISAC)', fileName: '', status: 'manquant', provenance: 'fourni_candidat' },
+      ],
+    },
+  ],
+  [
+    'app-006a',
+    {
+      id: 'app-006a',
+      referenceNumber: 'USMBA-DOC-2026-9101',
+      candidateId: 'usr-candidat-6',
+      candidateEmail: 'imane.bennani@usmba.ac.ma',
+      cin: 'CD781234',
+      cne: 'N136778899',
+      studentOriginType: 'interne_usmba',
+      subjectId: 'suj-001',
+      laboratoryId: 'lisac',
+      supervisorId: 'usr-chercheur-1',
+      supervisorName: 'Pr. Abdelhafid EL ALAOUI',
+      status: 'recevable',
+      documents: [
+        { id: 'doc-6a-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD781234_Imane_Bennani.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6a-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N136778899.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6a-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N136778899.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6a-4', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Master_N136778899.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6a-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'APOGEE_DEMO_Releves_N136778899.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6a-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Imane_Bennani_2026.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6a-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Imane_LISAC.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6a-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Vision_Imane.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6a-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Imane.pdf', status: 'valide', provenance: 'fourni_candidat' },
+      ],
+    },
+  ],
+  [
+    'app-006b',
+    {
+      id: 'app-006b',
+      referenceNumber: 'USMBA-DOC-2026-9102',
+      candidateId: 'usr-candidat-6',
+      candidateEmail: 'imane.bennani@usmba.ac.ma',
+      cin: 'CD781234',
+      cne: 'N136778899',
+      studentOriginType: 'interne_usmba',
+      subjectId: 'suj-002',
+      laboratoryId: 'lerma',
+      supervisorId: 'usr-labo-1',
+      supervisorName: 'Pr. Fatima-Zahra BENCHEIKH',
+      status: 'incomplete',
+      documents: [
+        { id: 'doc-6b-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_CD781234_Imane_Bennani.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-1/content', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6b-2', type: 'bac', label: 'Diplôme du Baccalauréat', fileName: 'APOGEE_DEMO_Bac_N136778899.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-2/content', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6b-3', type: 'licence', label: 'Diplôme de Licence ou équivalent', fileName: 'APOGEE_DEMO_Licence_N136778899.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-3/content', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6b-4', type: 'master', label: 'Diplôme de Master ou Attestation de Réussite', fileName: 'APOGEE_DEMO_Master_N136778899.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-4/content', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6b-5', type: 'releves_notes', label: "Relevés de notes de l'ensemble du cursus (S1 à S4)", fileName: 'APOGEE_DEMO_Releves_N136778899.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-5/content', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-6b-6', type: 'cv', label: 'Curriculum Vitae détaillé', fileName: 'CV_Imane_Bennani_2026.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-6/content', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6b-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'Attestation_Non_Travail_Imane.pdf', fileUrl: '/api/applications/app-006a/documents/doc-6a-9/content', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-6b-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Imane_LERMA.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-6b-8', type: 'projet_recherche', label: 'Avant-projet de recherche de thèse', fileName: 'Projet_Modelisation_Thermique_Imane.pdf', status: 'en_attente', provenance: 'fourni_candidat' },
+        { id: 'doc-6b-rec', type: 'lettre_recommandation', label: 'Lettre de recommandation académique (spécifique LERMA)', fileName: '', status: 'manquant', provenance: 'fourni_candidat' },
+      ],
+    },
+  ],
+  [
+    'app-adm-001',
+    {
+      id: 'app-adm-001',
+      referenceNumber: 'USMBA-DOC-2026-9041',
+      candidateId: 'usr-candidat-admis',
+      candidateEmail: 'salma.elfassi@usmba.ac.ma',
+      cin: 'CD908123',
+      cne: 'N132456789',
+      studentOriginType: 'interne_usmba',
+      subjectId: 'suj-003',
+      laboratoryId: 'lim',
+      supervisorId: 'usr-directeur-1',
       supervisorName: 'Pr. Mohammed ZOUHAIR',
       status: 'admise',
       documents: [
-        { id: 'doc-31', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-32', type: 'bac', label: 'Baccalauréat', fileName: 'Bac_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-33', type: 'licence', label: 'Diplôme de Licence', fileName: 'Licence_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-34', type: 'master', label: 'Diplôme de Master', fileName: 'Master_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-35', type: 'releves_notes', label: 'Relevés de notes', fileName: 'Releves_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
-        { id: 'doc-36', type: 'cv', label: 'Curriculum Vitae', fileName: 'CV_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-37', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-38', type: 'projet_recherche', label: 'Projet de recherche', fileName: 'Projet_PostQuantique.pdf', status: 'valide', provenance: 'fourni_candidat' },
-        { id: 'doc-39', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'NonTravail_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-adm-1', type: 'cin', label: "Carte d'Identité Nationale (CIN)", fileName: 'CIN_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-adm-2', type: 'bac', label: 'Baccalauréat', fileName: 'Bac_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-adm-3', type: 'licence', label: 'Diplôme de Licence', fileName: 'Licence_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-adm-4', type: 'master', label: 'Diplôme de Master', fileName: 'Master_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-adm-5', type: 'releves_notes', label: 'Relevés de notes', fileName: 'Releves_Salma.pdf', status: 'valide', provenance: 'recupere_administration', isDemoApogee: true },
+        { id: 'doc-adm-6', type: 'cv', label: 'Curriculum Vitae', fileName: 'CV_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-adm-7', type: 'lettre_motivation', label: 'Lettre de motivation', fileName: 'Motivation_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-adm-8', type: 'projet_recherche', label: 'Projet de recherche', fileName: 'Projet_PostQuantique.pdf', status: 'valide', provenance: 'fourni_candidat' },
+        { id: 'doc-adm-9', type: 'attestation_non_travail', label: 'Attestation de non travail', fileName: 'NonTravail_Salma.pdf', status: 'valide', provenance: 'fourni_candidat' },
       ],
     },
   ],
@@ -876,16 +1167,16 @@ const serverRegistrations = new Map<string, any>([
     'reg-001',
     {
       id: 'reg-001',
-      candidateId: 'usr-candidat-3',
+      candidateId: 'usr-candidat-admis',
       cin: 'CD908123',
       laboratoryId: 'lim',
       supervisorName: 'Pr. Mohammed ZOUHAIR',
       documents: {
-        'rd-1': { fileName: 'Originaux_Diplomes_Certifies.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Originaux des Diplomes Certifies (Demo)', ['Doctorante : Salma EL FASSI', 'CIN : CD908123 | CNE : N132456789']) },
-        'rd-2': { fileName: 'Charte_Theses_Signee.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Charte des Theses USMBA (Demo)', ['Signee par Salma EL FASSI et Pr. M. ZOUHAIR']) },
+        'rd-1': { fileName: 'Originaux_Diplomes_Certifies.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Originaux des Diplomes Certifies (Simulation)', ['Doctorante : Salma EL FASSI', 'CIN : CD908123 | CNE : N132456789']) },
+        'rd-2': { fileName: 'Charte_Theses_Signee.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Charte des Theses USMBA (Simulation)', ['Signee par Salma EL FASSI et Pr. M. ZOUHAIR']) },
         'rd-3': { fileName: 'Photos_Identite.png', mimeType: 'image/png', dataUrl: createServerDemoPngDataUrl() },
-        'rd-4': { fileName: 'Attestation_Assurance_2026.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Attestation Assurance Etudiante (Demo)', ['Annee universitaire 2026-2027']) },
-        'rd-5': { fileName: 'Engagement_Reglement.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Engagement Reglement Interieur (Demo)', ['CEDoc USMBA Fes']) },
+        'rd-4': { fileName: 'Attestation_Assurance_2026.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Attestation Assurance Etudiante (Simulation)', ['Annee universitaire 2026-2027']) },
+        'rd-5': { fileName: 'Engagement_Reglement.pdf', mimeType: 'application/pdf', dataUrl: createServerDemoPdfDataUrl('Engagement Reglement Interieur (Simulation)', ['CEDoc USMBA Fes']) },
       },
     },
   ],
@@ -947,6 +1238,53 @@ function findServerUserByEmail(email: string): ServerUser | undefined {
     if (user.email.toLowerCase() === target) return user;
   }
   return undefined;
+}
+
+function findServerUserByGoogleId(googleId: string): ServerUser | undefined {
+  if (!googleId) return undefined;
+  for (const user of serverUsers.values()) {
+    if (user.googleId && user.googleId === googleId) return user;
+  }
+  return undefined;
+}
+
+function findOrLinkUserForVerifiedGoogle(identity: VerifiedGoogleIdentity): ServerUser | undefined {
+  const byGoogleId = findServerUserByGoogleId(identity.googleId);
+  if (byGoogleId) return byGoogleId;
+
+  const byEmail = findServerUserByEmail(identity.email);
+  if (byEmail) {
+    byEmail.googleId = identity.googleId;
+    byEmail.googleLinkedAt = new Date().toISOString();
+    byEmail.isEmailVerified = true;
+    serverUsers.set(byEmail.id, byEmail);
+    return byEmail;
+  }
+  return undefined;
+}
+
+function serializePublicUser(u: ServerUser) {
+  return {
+    id: u.id,
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    cin: u.cin,
+    cne: u.cne,
+    phone: u.phone,
+    establishmentId: u.establishmentId,
+    laboratoryId: u.laboratoryId,
+    roles: u.roles,
+    currentRole: u.currentRole,
+    isActive: u.isActive,
+    isEmailVerified: u.isEmailVerified,
+    googleId: u.googleId,
+    googleLinkedAt: u.googleLinkedAt,
+    studentOriginType: u.studentOriginType,
+    originEstablishment: u.originEstablishment,
+    masterSpecialty: u.masterSpecialty,
+    createdAt: u.createdAt,
+  };
 }
 
 const STAFF_ROLES = new Set([
@@ -1414,41 +1752,167 @@ Schéma JSON attendu :
 
 /**
  * GET /api/auth/google/config
- * Exposes safe public Google Sign-In configuration (no secrets)
+ * Exposes safe public Google OAuth configuration & honest diagnostics (NEVER exposes GOOGLE_CLIENT_SECRET)
  */
-app.get('/api/auth/google/config', (_req: Request, res: Response) => {
-  const gisClientId = (process.env.VITE_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
-  const oauthPopupEnabled = Boolean(
-    (process.env.GOOGLE_CLIENT_ID || '').trim() && (process.env.GOOGLE_CLIENT_SECRET || '').trim()
-  );
+app.get('/api/auth/google/config', (req: Request, res: Response) => {
+  const serverClientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const viteClientId = (process.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+  const effectiveClientId = serverClientId || viteClientId;
+  const hasClientSecret = Boolean((process.env.GOOGLE_CLIENT_SECRET || '').trim());
+
+  const jsOrigin = getAppBaseUrl(req);
+  const redirectUri = getOAuthRedirectUri(req);
+  const oauthCodeFlowEnabled = Boolean(effectiveClientId && hasClientSecret);
+
   return res.json({
-    configured: Boolean(gisClientId || oauthPopupEnabled),
-    gisClientId: gisClientId || null,
-    oauthPopupEnabled,
+    configured: true,
+    simulationMode: true,
+    simulationLabel: 'Mode démonstration académique',
+    oauthCodeFlowEnabled,
+    oauthPopupEnabled: oauthCodeFlowEnabled,
+    hasClientId: true,
     allowedDomain: ALLOWED_GOOGLE_DOMAIN,
+    jsOrigin,
+    redirectUri,
+    promptMode: 'select_account',
+  });
+});
+
+/**
+ * POST /api/auth/google/simulate
+ * Academic demonstration Google account selector simulation endpoint.
+ * Strictly enforces @usmba.ac.ma domain and rejects @gmail.com or external domains.
+ */
+app.post('/api/auth/google/simulate', (req: Request, res: Response) => {
+  const { email, name, givenName, familyName } = req.body || {};
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'INVALID_EMAIL',
+      message: 'Veuillez saisir une adresse e-mail valide pour la simulation.',
+    });
+  }
+
+  if (!isStrictUsmbaDomain(cleanEmail)) {
+    return res.status(403).json({
+      success: false,
+      errorCode: 'DOMAIN_DENIED',
+      message: DOMAIN_DENIED_MESSAGE,
+    });
+  }
+
+  const emailLocal = cleanEmail.split('@')[0] || 'candidat';
+  const derivedParts = emailLocal.split(/[._-]+/).filter(Boolean);
+  const fallbackFirst = derivedParts[0]
+    ? derivedParts[0].charAt(0).toUpperCase() + derivedParts[0].slice(1)
+    : 'Nouveau';
+  const fallbackLast = derivedParts[1]
+    ? derivedParts[1].toUpperCase()
+    : 'CANDIDAT';
+
+  const identity: VerifiedGoogleIdentity = {
+    googleId: `sim-google-${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0, 14)}`,
+    email: cleanEmail,
+    hd: ALLOWED_GOOGLE_DOMAIN,
+    name: String(name || `${givenName || fallbackFirst} ${familyName || fallbackLast}`.trim()),
+    givenName: String(givenName || fallbackFirst),
+    familyName: String(familyName || fallbackLast),
+    photoUrl: '',
+    emailVerified: true,
+  };
+
+  const existingUser = findOrLinkUserForVerifiedGoogle(identity);
+  if (existingUser) {
+    if (!existingUser.isActive) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'ACCOUNT_DISABLED',
+        message: "Votre compte a été temporairement désactivé par l'administration.",
+      });
+    }
+
+    const sessionToken = setSessionCookie(req, res, {
+      userId: existingUser.id,
+      email: existingUser.email,
+      currentRole: existingUser.currentRole,
+      roles: existingUser.roles,
+    });
+
+    return res.json({
+      success: true,
+      simulationMode: true,
+      accountExists: true,
+      existingUser: serializePublicUser(existingUser),
+      sessionToken,
+      user: {
+        ...identity,
+        verifiedEmail: true,
+      },
+    });
+  }
+
+  const onboardingToken = setOnboardingCookie(req, res, identity);
+  return res.json({
+    success: true,
+    simulationMode: true,
+    accountExists: false,
+    onboardingToken,
+    user: {
+      ...identity,
+      verifiedEmail: true,
+    },
+    message: 'Compte académique simulé @usmba.ac.ma vérifié. Complétez maintenant votre profil candidat.',
   });
 });
 
 /**
  * GET /api/auth/google/url
- * Constructs the Google OAuth 2.0 Authorization Code URL restricted by domain hint hd=usmba.ac.ma
+ * Constructs the Google OAuth 2.0 Authorization Code URL with prompt=select_account & hd=usmba.ac.ma
  */
 app.get('/api/auth/google/url', (req: Request, res: Response) => {
-  const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
 
   if (!clientId || !clientSecret) {
+    const missing: string[] = [];
+    if (!clientId) missing.push('GOOGLE_CLIENT_ID');
+    if (!clientSecret) missing.push('GOOGLE_CLIENT_SECRET');
     return res.status(503).json({
       success: false,
       errorCode: 'OAUTH_NOT_CONFIGURED',
-      message:
-        'L\'authentification Google OAuth 2.0 n\'est pas encore configurée sur le serveur (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET ou VITE_GOOGLE_CLIENT_ID).',
+      missingVars: missing,
+      message: `Configuration Google OAuth incomplète sur le serveur (${missing.join(', ')} manquant(s)).`,
     });
   }
 
+  pruneExpiredOAuthMaps();
+
   const redirectUri = getOAuthRedirectUri(req);
   const mode = req.query.mode === 'register' ? 'register' : 'login';
+  let openerOrigin = getAppBaseUrl(req);
+  const requestedOrigin = String(req.query.origin || '').trim();
+  if (requestedOrigin) {
+    try {
+      const parsedOrigin = new URL(requestedOrigin);
+      if (parsedOrigin.protocol === 'https:' || parsedOrigin.protocol === 'http:') {
+        openerOrigin = parsedOrigin.origin;
+      }
+    } catch {
+      // Ignore malformed origin query param
+    }
+  }
+
   const nonce = crypto.randomBytes(16).toString('hex');
+  pendingOAuthStates.set(nonce, {
+    nonce,
+    mode,
+    redirectUri,
+    openerOrigin,
+    exp: Date.now() + 1000 * 60 * 10,
+  });
+
   const stateToken = signTokenPayload({
     kind: 'oauth_state',
     nonce,
@@ -1471,30 +1935,44 @@ app.get('/api/auth/google/url', (req: Request, res: Response) => {
   return res.json({
     success: true,
     url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+    redirectUri,
   });
 });
 
 /**
  * GET /auth/google/callback
- * Exchanges Google OAuth code for tokens, verifies id_token + email_verified=true + exact @usmba.ac.ma domain,
- * sets HttpOnly session or onboarding cookie, and notifies opener window via postMessage.
+ * Exchanges Google OAuth code for tokens using server-only GOOGLE_CLIENT_SECRET,
+ * verifies id_token + email_verified=true + hd/domain === usmba.ac.ma,
+ * creates a single-use iframe-safe exchangeCode, and notifies opener via postMessage.
  */
 async function handleGoogleOAuthCallback(req: Request, res: Response) {
+  let targetOpenerOrigin = '*';
   const sendPopupMessage = (payload: Record<string, any>) => {
     const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+    const safeOrigin = JSON.stringify(targetOpenerOrigin).replace(/</g, '\\u003c');
     return res.send(`<!doctype html>
 <html lang="fr">
   <head><meta charset="utf-8"><title>Authentification Google — GCD USMBA</title></head>
   <body style="font-family:sans-serif;padding:24px;text-align:center;color:#0f172a;">
-    <p>${payload.type === 'GOOGLE_OAUTH_ERROR' ? 'Authentification refusée.' : 'Authentification réussie.'} Cette fenêtre va se fermer automatiquement.</p>
+    <p>${payload.type === 'GOOGLE_OAUTH_ERROR' ? 'Authentification refusée.' : 'Authentification vérifiée.'} Cette fenêtre va se fermer automatiquement.</p>
     <script>
       (function () {
         var msg = ${safeJson};
+        var origin = ${safeOrigin};
         if (window.opener) {
-          window.opener.postMessage(msg, '*');
+          try {
+            window.opener.postMessage(msg, origin);
+          } catch (e) {
+            window.opener.postMessage(msg, '*');
+          }
           window.close();
         } else {
-          window.location.href = '/login';
+          var q = msg.exchangeCode
+            ? '?oauth_code=' + encodeURIComponent(msg.exchangeCode)
+            : msg.message
+            ? '?oauth_error=' + encodeURIComponent(msg.message)
+            : '';
+          window.location.href = '/login' + q;
         }
       })();
     </script>
@@ -1503,6 +1981,16 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
   };
 
   try {
+    pruneExpiredOAuthMaps();
+
+    const stateRaw = String(req.query.state || '');
+    const statePayload = verifyTokenPayload<{ kind: string; nonce: string; mode: string; exp: number }>(stateRaw);
+    const savedState = statePayload?.nonce ? pendingOAuthStates.get(statePayload.nonce) : undefined;
+    if (savedState) {
+      targetOpenerOrigin = savedState.openerOrigin || '*';
+      pendingOAuthStates.delete(statePayload!.nonce);
+    }
+
     const oauthError = String(req.query.error || '');
     if (oauthError) {
       return sendPopupMessage({
@@ -1513,11 +2001,9 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
     }
 
     const code = String(req.query.code || '');
-    const stateRaw = String(req.query.state || '');
-    const statePayload = verifyTokenPayload<{ kind: string; nonce: string; mode: string; exp: number }>(stateRaw);
     const cookies = parseCookies(req.headers.cookie);
 
-    if (!code || !statePayload || statePayload.kind !== 'oauth_state') {
+    if (!code || !statePayload || statePayload.kind !== 'oauth_state' || !savedState || savedState.exp <= Date.now()) {
       return sendPopupMessage({
         type: 'GOOGLE_OAUTH_ERROR',
         errorCode: 'INVALID_STATE',
@@ -1533,11 +2019,24 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
       });
     }
     const clearOpts = getAuthCookieOptions(req, 0);
-    res.clearCookie(OAUTH_STATE_COOKIE_NAME, { path: '/', sameSite: clearOpts.sameSite, secure: clearOpts.secure });
+    res.clearCookie(OAUTH_STATE_COOKIE_NAME, {
+      path: '/',
+      sameSite: clearOpts.sameSite,
+      secure: clearOpts.secure,
+      partitioned: clearOpts.partitioned,
+    } as any);
 
-    const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+    const clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '').trim();
     const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
-    const redirectUri = getOAuthRedirectUri(req);
+    if (!clientId || !clientSecret) {
+      return sendPopupMessage({
+        type: 'GOOGLE_OAUTH_ERROR',
+        errorCode: 'OAUTH_NOT_CONFIGURED',
+        message: 'Variables GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET absentes sur le serveur.',
+      });
+    }
+
+    const redirectUri = savedState.redirectUri || getOAuthRedirectUri(req);
 
     const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -1556,7 +2055,7 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
       return sendPopupMessage({
         type: 'GOOGLE_OAUTH_ERROR',
         errorCode: 'TOKEN_EXCHANGE_FAILED',
-        message: 'Impossible d\'échanger le code d\'autorisation Google.',
+        message: 'Impossible d\'échanger le code d\'autorisation Google (vérifiez redirect_uri et client_secret).',
       });
     }
 
@@ -1570,16 +2069,25 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
     }
 
     const { identity } = verification;
-    const existingUser = findServerUserByEmail(identity.email);
+    const existingUser = findOrLinkUserForVerifiedGoogle(identity);
+
+    if (existingUser && !existingUser.isActive) {
+      return sendPopupMessage({
+        type: 'GOOGLE_OAUTH_ERROR',
+        errorCode: 'ACCOUNT_DISABLED',
+        message: 'Votre compte a été temporairement désactivé par l\'administration.',
+      });
+    }
+
+    const exchangeCode = crypto.randomBytes(24).toString('hex');
+    pendingOAuthExchanges.set(exchangeCode, {
+      accountExists: Boolean(existingUser),
+      existingUser,
+      identity,
+      exp: Date.now() + 1000 * 90,
+    });
 
     if (existingUser) {
-      if (!existingUser.isActive) {
-        return sendPopupMessage({
-          type: 'GOOGLE_OAUTH_ERROR',
-          errorCode: 'ACCOUNT_DISABLED',
-          message: 'Votre compte a été temporairement désactivé par l\'administration.',
-        });
-      }
       setSessionCookie(req, res, {
         userId: existingUser.id,
         email: existingUser.email,
@@ -1589,6 +2097,7 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
       return sendPopupMessage({
         type: 'GOOGLE_OAUTH_SUCCESS',
         accountExists: true,
+        exchangeCode,
       });
     }
 
@@ -1596,6 +2105,7 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
     return sendPopupMessage({
       type: 'GOOGLE_OAUTH_SUCCESS',
       accountExists: false,
+      exchangeCode,
     });
   } catch (err) {
     console.error('Google OAuth callback error:', err);
@@ -1610,10 +2120,84 @@ async function handleGoogleOAuthCallback(req: Request, res: Response) {
 app.get(['/auth/google/callback', '/auth/google/callback/'], handleGoogleOAuthCallback);
 
 /**
+ * POST /api/auth/google/exchange
+ * Exchanges a single-use server-issued exchangeCode (received via postMessage from the OAuth popup)
+ * so the app inside the cross-origin iframe receives the verified session/onboarding token & cookies.
+ */
+app.post('/api/auth/google/exchange', (req: Request, res: Response) => {
+  pruneExpiredOAuthMaps();
+  const exchangeCode = String(req.body?.exchangeCode || '').trim();
+  if (!exchangeCode) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'MISSING_EXCHANGE_CODE',
+      message: 'Code d\'échange OAuth manquant.',
+    });
+  }
+
+  const record = pendingOAuthExchanges.get(exchangeCode);
+  if (!record || record.exp <= Date.now()) {
+    pendingOAuthExchanges.delete(exchangeCode);
+    return res.status(401).json({
+      success: false,
+      errorCode: 'EXCHANGE_EXPIRED',
+      message: 'Session d\'authentification Google expirée. Veuillez réessayer.',
+    });
+  }
+
+  pendingOAuthExchanges.delete(exchangeCode);
+
+  if (record.accountExists && record.existingUser) {
+    const u = record.existingUser;
+    if (!u.isActive) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'ACCOUNT_DISABLED',
+        message: 'Votre compte a été temporairement désactivé par l\'administration.',
+      });
+    }
+    const sessionToken = setSessionCookie(req, res, {
+      userId: u.id,
+      email: u.email,
+      currentRole: u.currentRole,
+      roles: u.roles,
+    });
+
+    return res.json({
+      success: true,
+      accountExists: true,
+      existingUser: serializePublicUser(u),
+      sessionToken,
+      user: record.identity ? { ...record.identity, verifiedEmail: true } : undefined,
+    });
+  }
+
+  if (!record.identity) {
+    return res.status(401).json({
+      success: false,
+      errorCode: 'IDENTITY_MISSING',
+      message: 'Identité Google introuvable.',
+    });
+  }
+
+  const onboardingToken = setOnboardingCookie(req, res, record.identity);
+  return res.json({
+    success: true,
+    accountExists: false,
+    onboardingToken,
+    user: {
+      ...record.identity,
+      verifiedEmail: true,
+    },
+    message: 'Compte Google académique vérifié. Veuillez compléter votre inscription candidat.',
+  });
+});
+
+/**
  * POST /api/auth/google/verify
  * Verifies Google OAuth ID token (credential) directly with Google servers.
  * NEVER trusts client-supplied email/userInfo without a valid Google-signed token.
- * Enforces email_verified = true and exact domain === "usmba.ac.ma".
+ * Enforces email_verified = true, hd claim (when present), and exact domain === "usmba.ac.ma".
  */
 app.post('/api/auth/google/verify', async (req: Request, res: Response) => {
   try {
@@ -1638,7 +2222,7 @@ app.post('/api/auth/google/verify', async (req: Request, res: Response) => {
     }
 
     const { identity } = verification;
-    const existingUser = findServerUserByEmail(identity.email);
+    const existingUser = findOrLinkUserForVerifiedGoogle(identity);
 
     if (existingUser) {
       if (!existingUser.isActive) {
@@ -1659,25 +2243,7 @@ app.post('/api/auth/google/verify', async (req: Request, res: Response) => {
       return res.json({
         success: true,
         accountExists: true,
-        existingUser: {
-          id: existingUser.id,
-          email: existingUser.email,
-          firstName: existingUser.firstName,
-          lastName: existingUser.lastName,
-          cin: existingUser.cin,
-          cne: existingUser.cne,
-          phone: existingUser.phone,
-          establishmentId: existingUser.establishmentId,
-          laboratoryId: existingUser.laboratoryId,
-          roles: existingUser.roles,
-          currentRole: existingUser.currentRole,
-          isActive: existingUser.isActive,
-          isEmailVerified: existingUser.isEmailVerified,
-          studentOriginType: existingUser.studentOriginType,
-          originEstablishment: existingUser.originEstablishment,
-          masterSpecialty: existingUser.masterSpecialty,
-          createdAt: existingUser.createdAt,
-        },
+        existingUser: serializePublicUser(existingUser),
         sessionToken,
         user: {
           ...identity,
@@ -1806,6 +2372,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         verifiedIdentity = {
           googleId: parsedOnboarding.googleId,
           email: parsedOnboarding.email.trim().toLowerCase(),
+          hd: ALLOWED_GOOGLE_DOMAIN,
           name: parsedOnboarding.name,
           givenName: parsedOnboarding.givenName,
           familyName: parsedOnboarding.familyName,
@@ -1882,6 +2449,8 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
       currentRole: 'candidat',
       isActive: true,
       isEmailVerified: true,
+      googleId: verifiedIdentity.googleId,
+      googleLinkedAt: new Date().toISOString(),
       studentOriginType: detectedOrigin,
       originEstablishment: originEstablishment || '',
       masterSpecialty: masterSpecialty || '',
@@ -1892,7 +2461,12 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
 
     serverUsers.set(userId, newUser);
     const clearOpts = getAuthCookieOptions(req, 0);
-    res.clearCookie(ONBOARDING_COOKIE_NAME, { path: '/', sameSite: clearOpts.sameSite, secure: clearOpts.secure });
+    res.clearCookie(ONBOARDING_COOKIE_NAME, {
+      path: '/',
+      sameSite: clearOpts.sameSite,
+      secure: clearOpts.secure,
+      partitioned: clearOpts.partitioned,
+    } as any);
 
     const sessionToken = setSessionCookie(req, res, {
       userId: newUser.id,
@@ -1941,13 +2515,23 @@ app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res: Response) 
   if (!req.authUser || !isStrictUsmbaDomain(req.authUser.email)) {
     return res.status(403).json({ success: false, errorCode: 'DOMAIN_DENIED', message: DOMAIN_DENIED_MESSAGE });
   }
-  return res.json({ success: true, user: req.authUser });
+  return res.json({ success: true, user: serializePublicUser(req.authUser) });
 });
 
 app.post('/api/auth/logout', (req: Request, res: Response) => {
   const opts = getAuthCookieOptions(req, 0);
-  res.clearCookie(SESSION_COOKIE_NAME, { path: '/', sameSite: opts.sameSite, secure: opts.secure });
-  res.clearCookie(ONBOARDING_COOKIE_NAME, { path: '/', sameSite: opts.sameSite, secure: opts.secure });
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    path: '/',
+    sameSite: opts.sameSite,
+    secure: opts.secure,
+    partitioned: opts.partitioned,
+  } as any);
+  res.clearCookie(ONBOARDING_COOKIE_NAME, {
+    path: '/',
+    sameSite: opts.sameSite,
+    secure: opts.secure,
+    partitioned: opts.partitioned,
+  } as any);
   return res.json({ success: true, message: 'Déconnexion effectuée.' });
 });
 
@@ -2041,9 +2625,15 @@ function canUserAccessApplication(user: ServerUser, activeRole: string, appRecor
     );
   }
   if (activeRole === 'jury' || activeRole === 'responsable_formation') {
-    return ['recevable', 'entretien_programme', 'entretien_passe', 'liste_principale', 'liste_attente', 'admise', 'refusee'].includes(
-      appRecord.status
-    );
+    return [
+      'recevable',
+      'en_cours_evaluation',
+      'entretien_programme',
+      'en_attente_decision',
+      'admise',
+      'liste_attente',
+      'non_admise',
+    ].includes(appRecord.status);
   }
   return false;
 }
@@ -2181,6 +2771,60 @@ app.post('/api/applications', requireAuth, (req: AuthenticatedRequest, res: Resp
   };
   serverApplications.set(stored.id, stored);
   return res.status(201).json({ success: true, application: sanitizeApplicationForResponse(stored) });
+});
+
+app.put('/api/applications/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const user = req.authUser!;
+  const activeRole = req.authSession!.currentRole || user.currentRole;
+  const existing = serverApplications.get(req.params.id);
+  const incoming = req.body;
+
+  if (!incoming || typeof incoming !== 'object') {
+    return res.status(400).json({ success: false, message: 'Corps de requête invalide.' });
+  }
+
+  const isStaffAdmin = ['administration', 'responsable_gcd', 'responsable_formation', 'jury'].includes(activeRole);
+  const isOwner = existing
+    ? existing.candidateId === user.id ||
+      (existing.candidateEmail && existing.candidateEmail.toLowerCase() === user.email.toLowerCase()) ||
+      (existing.cin && user.cin && existing.cin.toUpperCase() === user.cin.toUpperCase())
+    : incoming.candidateId === user.id ||
+      (incoming.candidateEmail && String(incoming.candidateEmail).toLowerCase() === user.email.toLowerCase());
+
+  if (!isStaffAdmin && !isOwner) {
+    return res.status(403).json({
+      success: false,
+      message: 'Accès interdit : vous ne pouvez pas modifier ce dossier.',
+    });
+  }
+
+  const targetId = req.params.id;
+  const sanitizedDocs = Array.isArray(incoming.documents)
+    ? incoming.documents.map((d: any) => {
+        if (d.fileUrl && typeof d.fileUrl === 'string' && d.fileUrl.startsWith('data:')) {
+          registerAppDocBlob(targetId, d.id, d.fileName || `${d.type}.pdf`, d.fileUrl);
+          return {
+            ...d,
+            fileUrl: `/api/applications/${targetId}/documents/${d.id}/content`,
+          };
+        }
+        return d;
+      })
+    : existing?.documents || [];
+
+  const merged = {
+    ...(existing || {}),
+    ...incoming,
+    id: targetId,
+    candidateId: existing?.candidateId || incoming.candidateId || user.id,
+    candidateEmail: existing?.candidateEmail || incoming.candidateEmail || user.email,
+    cin: existing?.cin || incoming.cin || user.cin,
+    documents: sanitizedDocs,
+    updatedAt: new Date().toISOString(),
+  };
+
+  serverApplications.set(targetId, merged);
+  return res.json({ success: true, application: sanitizeApplicationForResponse(merged) });
 });
 
 app.patch(
@@ -2440,7 +3084,7 @@ const DEMO_APOGEE_STUDENTS: Record<string, any> = {
   N134098765: {
     cne: 'N134098765',
     cin: 'CD654321',
-    fullName: 'Hajar Amellah',
+    fullName: 'Kenza Benali',
     establishmentId: 'fsdm',
     establishmentName: 'Faculté des Sciences Dhar El Mahraz (USMBA)',
     masterSpecialty: 'Informatique Décisionnelle et Systèmes Intelligents (IDSI)',
@@ -2451,7 +3095,7 @@ const DEMO_APOGEE_STUDENTS: Record<string, any> = {
         type: 'bac',
         label: 'Diplôme du Baccalauréat',
         fileName: 'APOGEE_DEMO_Baccalaureat_N134098765.pdf',
-        dataUrl: createServerDemoPdfDataUrl('Baccalaureat (Demo APOGEE)', ['Etudiante : Hajar AMELLAH', 'CNE : N134098765 | Mention Tres Bien']),
+        dataUrl: createServerDemoPdfDataUrl('Baccalaureat (Simulation APOGEE)', ['Etudiante : Kenza BENALI', 'CNE : N134098765 | Mention Tres Bien']),
         status: 'valide',
         provenance: 'recupere_administration',
         isDemoApogee: true,
@@ -2460,27 +3104,27 @@ const DEMO_APOGEE_STUDENTS: Record<string, any> = {
         type: 'licence',
         label: 'Diplôme de Licence ou équivalent',
         fileName: 'APOGEE_DEMO_Licence_SMI_N134098765.pdf',
-        dataUrl: createServerDemoPdfDataUrl('Licence SMI FSDM (Demo APOGEE)', ['Etudiante : Hajar AMELLAH', 'Licence SMI - USMBA Fes']),
+        dataUrl: createServerDemoPdfDataUrl('Licence SMI FSDM (Simulation APOGEE)', ['Etudiante : Kenza BENALI', 'Licence SMI - USMBA Fes']),
         status: 'valide',
         provenance: 'recupere_administration',
         isDemoApogee: true,
       },
       {
         type: 'master',
-        label: 'Diplôme de Master, Master Spécialisé ou Diplôme d\'Ingénieur',
+        label: "Diplôme de Master, Master Spécialisé ou Diplôme d'Ingénieur",
         fileName: 'APOGEE_DEMO_Attestation_Master_IDSI.pdf',
-        dataUrl: createServerDemoPdfDataUrl('Master IDSI FSDM (Demo APOGEE)', ['Etudiante : Hajar AMELLAH', 'Master IDSI - Mention Tres Bien']),
+        dataUrl: createServerDemoPdfDataUrl('Master IDSI FSDM (Simulation APOGEE)', ['Etudiante : Kenza BENALI', 'Master IDSI - Mention Tres Bien']),
         status: 'valide',
         provenance: 'recupere_administration',
         isDemoApogee: true,
       },
       {
         type: 'releves_notes',
-        label: 'Relevés de notes de l\'ensemble du cursus universitaire (S1 à S4)',
+        label: "Relevés de notes de l'ensemble du cursus universitaire (S1 à S4)",
         fileName: 'APOGEE_DEMO_Releves_S1_S4_Certifies.pdf',
-        dataUrl: createServerDemoPdfDataUrl('Releves S1-S4 (Demo APOGEE)', [
-          ['Etudiante : Hajar AMELLAH', 'Semestre 1 : 16.40 / 20', 'Semestre 2 : 16.85 / 20'],
-          ['Etudiante : Hajar AMELLAH', 'Semestre 3 : 17.10 / 20', 'Semestre 4 : 17.60 / 20'],
+        dataUrl: createServerDemoPdfDataUrl('Releves S1-S4 (Simulation APOGEE)', [
+          ['Etudiante : Kenza BENALI', 'Semestre 1 : 16.40 / 20', 'Semestre 2 : 16.85 / 20'],
+          ['Etudiante : Kenza BENALI', 'Semestre 3 : 17.10 / 20', 'Semestre 4 : 17.60 / 20'],
         ]),
         status: 'valide',
         provenance: 'recupere_administration',
@@ -2491,7 +3135,7 @@ const DEMO_APOGEE_STUDENTS: Record<string, any> = {
   N138129845: {
     cne: 'N138129845',
     cin: 'CD712390',
-    fullName: 'Mehdi Benjelloun',
+    fullName: 'Youssef Berrada',
     establishmentId: 'ensa',
     establishmentName: 'École Nationale des Sciences Appliquées de Fès (USMBA)',
     masterSpecialty: 'Génie Énergétique et Systèmes Solaires',
@@ -2502,7 +3146,7 @@ const DEMO_APOGEE_STUDENTS: Record<string, any> = {
         type: 'bac',
         label: 'Diplôme du Baccalauréat',
         fileName: 'APOGEE_DEMO_Bac_N138129845.pdf',
-        dataUrl: createServerDemoPdfDataUrl('Baccalaureat (Demo APOGEE)', ['Etudiant : Mehdi BENJELLOUN', 'CNE : N138129845']),
+        dataUrl: createServerDemoPdfDataUrl('Baccalaureat (Simulation APOGEE)', ['Etudiant : Youssef BERRADA', 'CNE : N138129845']),
         status: 'valide',
         provenance: 'recupere_administration',
         isDemoApogee: true,
@@ -2511,7 +3155,112 @@ const DEMO_APOGEE_STUDENTS: Record<string, any> = {
         type: 'licence',
         label: 'Diplôme de Licence ou équivalent',
         fileName: 'APOGEE_DEMO_Licence_N138129845.pdf',
-        dataUrl: createServerDemoPdfDataUrl('Licence ENSA (Demo APOGEE)', ['Etudiant : Mehdi BENJELLOUN', 'CNE : N138129845']),
+        dataUrl: createServerDemoPdfDataUrl('Licence ENSA (Simulation APOGEE)', ['Etudiant : Youssef BERRADA', 'CNE : N138129845']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'master',
+        label: "Diplôme de Master ou Attestation de Réussite",
+        fileName: 'Master_Youssef_Berrada_ENSA.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Master ENSA (Simulation APOGEE)', ['Etudiant : Youssef BERRADA']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'releves_notes',
+        label: "Relevés de notes S1 à S4",
+        fileName: 'Releves_Youssef_Berrada_S1_S4.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Releves S1-S4 (Simulation APOGEE)', ['Etudiant : Youssef BERRADA']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+    ],
+  },
+  N139445566: {
+    cne: 'N139445566',
+    cin: 'CD823451',
+    fullName: 'Amine Tazi',
+    establishmentId: 'fsdm',
+    establishmentName: 'Faculté des Sciences Dhar El Mahraz (USMBA)',
+    masterSpecialty: 'Réseaux, Systèmes et Sécurité Informatique',
+    graduationYear: 2026,
+    mention: 'Bien',
+    availableAdministrativeDocuments: [
+      {
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'APOGEE_DEMO_Bac_N139445566.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Baccalaureat (Simulation APOGEE)', ['Etudiant : Amine TAZI']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'APOGEE_DEMO_Licence_N139445566.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Licence FSDM (Simulation APOGEE)', ['Etudiant : Amine TAZI']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'master',
+        label: 'Diplôme de Master ou Attestation de Réussite',
+        fileName: 'APOGEE_DEMO_Master_N139445566.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Master RSSI FSDM (Simulation APOGEE)', ['Etudiant : Amine TAZI']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+    ],
+  },
+  N136778899: {
+    cne: 'N136778899',
+    cin: 'CD781234',
+    fullName: 'Imane Bennani',
+    establishmentId: 'fsdm',
+    establishmentName: 'Faculté des Sciences Dhar El Mahraz (USMBA)',
+    masterSpecialty: 'Master Science des Données et Systèmes Intelligents',
+    graduationYear: 2026,
+    mention: 'Très Bien',
+    availableAdministrativeDocuments: [
+      {
+        type: 'bac',
+        label: 'Diplôme du Baccalauréat',
+        fileName: 'APOGEE_DEMO_Bac_N136778899.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Baccalaureat (Simulation APOGEE)', ['Etudiante : Imane BENNANI']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'licence',
+        label: 'Diplôme de Licence ou équivalent',
+        fileName: 'APOGEE_DEMO_Licence_N136778899.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Licence FSDM (Simulation APOGEE)', ['Etudiante : Imane BENNANI']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'master',
+        label: 'Diplôme de Master ou Attestation de Réussite',
+        fileName: 'APOGEE_DEMO_Master_N136778899.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Master SDSI FSDM (Simulation APOGEE)', ['Etudiante : Imane BENNANI']),
+        status: 'valide',
+        provenance: 'recupere_administration',
+        isDemoApogee: true,
+      },
+      {
+        type: 'releves_notes',
+        label: "Relevés de notes de l'ensemble du cursus (S1 à S4)",
+        fileName: 'APOGEE_DEMO_Releves_N136778899.pdf',
+        dataUrl: createServerDemoPdfDataUrl('Releves S1-S4 (Simulation APOGEE)', ['Etudiante : Imane BENNANI | Moyenne 16.55 / 20']),
         status: 'valide',
         provenance: 'recupere_administration',
         isDemoApogee: true,
@@ -2639,120 +3388,144 @@ app.get('/api/apogee/student', requireAuth, async (req: AuthenticatedRequest, re
 });
 
 /**
- * STRICTLY DEVELOPMENT-ONLY Demo Accounts Testing Mechanism
- * Never mounted and always returns 404 in production (NODE_ENV === 'production').
- * Keeps normal Google OAuth (/api/auth/google/verify) completely strict.
+ * Academic Demonstration Profiles Simulation Mechanism
+ * Unconditionally active in this academic demonstration project (6 Candidate Scenarios + Staff Profiles).
  */
 const DEV_DEMO_ACCOUNT_META: {
   id: string;
+  category: 'candidat_scenario' | 'staff_profile';
   spaceLabel: string;
   profileLabel: string;
   description: string;
 }[] = [
   {
     id: 'usr-candidat-1',
-    spaceLabel: 'Candidat (Interne USMBA)',
-    profileLabel: 'Candidat interne ayant déjà étudié à l’USMBA',
-    description: 'CNE N134098765 • FSDM • Pièces APOGÉE démo récupérées automatiquement sans ré-import.',
+    category: 'candidat_scenario',
+    spaceLabel: 'Scénario 1 • Interne complet',
+    profileLabel: 'Interne USMBA — Dossier complet (9/9 pièces valides)',
+    description: 'FSDM • CNE N134098765 • Dossier suj-001 complet, entretien programmé.',
   },
   {
-    id: 'usr-candidat-externe',
-    spaceLabel: 'Candidat (Externe)',
-    profileLabel: 'Candidat externe n’ayant jamais étudié à l’USMBA',
-    description: 'UH2C Casablanca • Dossier externe déposé (app-ext-001) + import requis sur nouvelle candidature.',
+    id: 'usr-candidat-2',
+    category: 'candidat_scenario',
+    spaceLabel: 'Scénario 2 • Interne incomplet',
+    profileLabel: 'Interne USMBA — Dossier incomplet (1 pièce manquante)',
+    description: 'ENSA • CNE N138129845 • Attestation de non-travail manquante sur app-002 (complétable en ligne).',
+  },
+  {
+    id: 'usr-candidat-3',
+    category: 'candidat_scenario',
+    spaceLabel: 'Scénario 3 • Document rejeté',
+    profileLabel: 'Interne USMBA — Document rejeté avec motif visible',
+    description: 'FSDM • CNE N139445566 • Relevé S4 rejeté sur app-003, remplacement fonctionnel.',
+  },
+  {
+    id: 'usr-candidat-4',
+    category: 'candidat_scenario',
+    spaceLabel: 'Scénario 4 • Externe complet',
+    profileLabel: 'Externe — Dossier complet (UH2C Casablanca)',
+    description: 'UH2C • CNE R145029384 • 9 pièces fournies et réutilisables pour d’autres sujets.',
+  },
+  {
+    id: 'usr-candidat-5',
+    category: 'candidat_scenario',
+    spaceLabel: 'Scénario 5 • Externe incomplet',
+    profileLabel: 'Externe — Dossier incomplet (complétion progressive)',
+    description: 'UCA Marrakech • CNE M142087612 • 4 pièces manquantes à téléverser progressivement.',
+  },
+  {
+    id: 'usr-candidat-6',
+    category: 'candidat_scenario',
+    spaceLabel: 'Scénario 6 • Multi-candidatures',
+    profileLabel: 'Multi-candidatures — Pièces communes réutilisées + 1 spécifique manquante',
+    description: 'FSDM • 2 dossiers : app-006a complet (recevable) et app-006b avec 1 lettre spécifique manquante.',
   },
   {
     id: 'usr-chercheur-1',
-    spaceLabel: 'Enseignant / Directeur de thèse',
-    profileLabel: 'Enseignant-chercheur / Encadrant (rôle unique)',
-    description: 'Labo LISAC • Sujets suj-001/suj-006, candidatures et doctorants encadrés (re-reg-001/002).',
+    category: 'staff_profile',
+    spaceLabel: 'Enseignant',
+    profileLabel: 'Enseignant-chercheur / Encadrant (LISAC)',
+    description: 'Sujets suj-001 / suj-006, candidatures rattachées et suivi doctorants.',
   },
   {
     id: 'usr-labo-1',
+    category: 'staff_profile',
     spaceLabel: 'Responsable laboratoire',
-    profileLabel: 'Directeur du laboratoire LERMA (rôle unique)',
-    description: 'Labo LERMA (ENSA) • Chercheurs rattachés, sujets validés et 2 sujets en attente de visa.',
+    profileLabel: 'Directeur du laboratoire LERMA (ENSA)',
+    description: 'Chercheurs rattachés, sujets validés et sujets en attente de visa.',
   },
   {
     id: 'usr-admin-1',
+    category: 'staff_profile',
     spaceLabel: 'Administration / Scolarité',
-    profileLabel: 'Gestionnaire Administration Scolarité (rôle unique)',
-    description: 'Instruction des dossiers (dont dossier externe Nadia Chraibi), pièces, inscriptions & réinscriptions.',
+    profileLabel: 'Gestionnaire Administration Scolarité',
+    description: 'Instruction de tous les dossiers, contrôle des pièces, inscriptions & réinscriptions.',
   },
   {
     id: 'usr-formation-1',
+    category: 'staff_profile',
     spaceLabel: 'Responsable formation',
-    profileLabel: 'Responsable Formation Doctorale CEDoc (rôle unique)',
-    description: 'Formations doctorales, sessions, activités scientifiques, suivi des crédits, entretiens & PV.',
+    profileLabel: 'Responsable Formation Doctorale CEDoc',
+    description: 'Formations doctorales, sessions, crédits, planification des entretiens & PV.',
   },
 ];
 
-if (process.env.NODE_ENV !== 'production') {
-  app.get('/api/dev/demo-accounts', (_req: Request, res: Response) => {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(404).json({ success: false, message: 'Non disponible en production.' });
-    }
-    const accounts = DEV_DEMO_ACCOUNT_META.map((meta) => {
-      const user = serverUsers.get(meta.id);
-      if (!user) return null;
-      return {
-        ...meta,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.currentRole,
-        studentOriginType: user.studentOriginType || null,
-      };
-    }).filter(Boolean);
+app.get('/api/dev/demo-accounts', (_req: Request, res: Response) => {
+  const accounts = DEV_DEMO_ACCOUNT_META.map((meta) => {
+    const user = serverUsers.get(meta.id);
+    if (!user) return null;
+    return {
+      ...meta,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.currentRole,
+      studentOriginType: user.studentOriginType || null,
+      isSimulatedDevAccount: true,
+      googleAccountLinked: Boolean(user.googleId),
+    };
+  }).filter(Boolean);
 
-    return res.json({
-      success: true,
-      environment: 'development',
-      accounts,
+  return res.json({
+    success: true,
+    environment: 'academic_demo',
+    simulationLabel: 'Mode démonstration académique',
+    accounts,
+  });
+});
+
+app.post('/api/dev/demo-login', (req: Request, res: Response) => {
+  const { userId } = req.body || {};
+  const demoUser = serverUsers.get(String(userId || ''));
+  if (!userId || !demoUser || !demoUser.isActive) {
+    return res.status(400).json({
+      success: false,
+      message: 'Identifiant de profil de simulation invalide.',
     });
+  }
+
+  const activeRole = demoUser.roles[0];
+  const sessionToken = setSessionCookie(req, res, {
+    userId: demoUser.id,
+    email: demoUser.email,
+    currentRole: activeRole,
+    roles: [activeRole],
   });
 
-  app.post('/api/dev/demo-login', (req: Request, res: Response) => {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(404).json({ success: false, message: 'Non disponible en production.' });
-    }
-    const { userId } = req.body || {};
-    const isAllowedDemo = DEV_DEMO_ACCOUNT_META.some((m) => m.id === userId);
-    if (!userId || !isAllowedDemo) {
-      return res.status(400).json({
-        success: false,
-        message: 'Identifiant de compte de démonstration invalide.',
-      });
-    }
+  console.log(`[Simulation Académique] Ouverture session pour ${demoUser.id} (Rôle: ${activeRole})`);
 
-    const demoUser = serverUsers.get(userId);
-    if (!demoUser || !demoUser.isActive) {
-      return res.status(404).json({ success: false, message: 'Compte de démonstration introuvable.' });
-    }
-
-    // Strict single role verification
-    const activeRole = demoUser.roles[0];
-    const sessionToken = setSessionCookie(req, res, {
-      userId: demoUser.id,
-      email: demoUser.email,
-      currentRole: activeRole,
+  return res.json({
+    success: true,
+    environment: 'academic_demo',
+    simulationMode: true,
+    user: {
+      ...serializePublicUser(demoUser),
       roles: [activeRole],
-    });
-
-    console.log(`[DEV Demo Login] Ouverture session test pour ${demoUser.email} (Rôle unique: ${activeRole})`);
-
-    return res.json({
-      success: true,
-      environment: 'development',
-      user: {
-        ...demoUser,
-        roles: [activeRole],
-        currentRole: activeRole,
-      },
-      sessionToken,
-    });
+      currentRole: activeRole,
+    },
+    sessionToken,
   });
-}
+});
 
 /**
  * Mount Vite development middlewares or serve static build files

@@ -13,6 +13,8 @@ export const Footer: React.FC = () => {
     }
     storageService.resetToDefaults();
     localStorage.removeItem('gcd_active_user_id');
+    sessionStorage.removeItem('gcd_selected_subject_ids');
+    sessionStorage.removeItem('gcd_pending_redirect');
     window.location.href = '/';
   };
 
@@ -32,7 +34,7 @@ export const Footer: React.FC = () => {
               Plateforme numérique de gestion intégrale du cycle doctoral (catalogue des sujets, dépôt de candidatures, instruction administrative, audition, délibération, inscription et réinscriptions annuelles).
             </p>
             <div className="text-[11px] text-amber-300/90 bg-amber-950/40 border border-amber-800/60 p-2.5 rounded-xl max-w-lg">
-              <strong>Notice académique :</strong> Plateforme universitaire de modernisation et de suivi du cycle doctoral de l'Université Sidi Mohamed Ben Abdellah (USMBA, Fès, Maroc).
+              <strong>Mode démonstration académique :</strong> Projet universitaire de présentation et de simulation. Toutes les données, personnes, pièces et connexions (Google / APOGÉE) sont fictives.
             </div>
           </div>
 

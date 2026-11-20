@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Printer,
@@ -8,7 +8,8 @@ import {
   Building2,
   UserCheck,
   Eye,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../services/storageService';
@@ -19,6 +20,10 @@ import {
   downloadProtectedDocument,
   ViewableDocumentInput
 } from '../../services/documentService';
+import {
+  isCommonDocumentType,
+  summarizeApplicationDocuments
+} from '../../utils/documentRequirements';
 
 export const CandidateApplicationDetail: React.FC = () => {
   const { currentUser, currentRole, sessionToken } = useAuth();
@@ -61,7 +66,20 @@ export const CandidateApplicationDetail: React.FC = () => {
   );
 
   const [selectedAppId, setSelectedAppId] = useState<string>(queryAppId || myApps[0]?.id || '');
+
+  useEffect(() => {
+    if (queryAppId && myApps.some((a) => a.id === queryAppId)) {
+      setSelectedAppId(queryAppId);
+    } else if (!myApps.some((a) => a.id === selectedAppId)) {
+      setSelectedAppId(myApps[0]?.id || '');
+    }
+  }, [queryAppId, currentUser?.id, myApps]);
+
   const myApp = myApps.find((a) => a.id === selectedAppId) || myApps[0];
+  const docSummary = useMemo(
+    () => summarizeApplicationDocuments(myApp?.documents || []),
+    [myApp]
+  );
 
   if (!myApp) {
     return (
@@ -133,7 +151,7 @@ export const CandidateApplicationDetail: React.FC = () => {
               Accusé de Réception de Candidature Doctorale
             </h1>
             <p className="text-xs text-slate-500">
-              Plateforme GCD • Université Sidi Mohamed Ben Abdellah
+              Plateforme GCD • Université Sidi Mohamed Ben Abdellah (Démonstration académique)
             </p>
           </div>
           <div className="text-right">
@@ -146,8 +164,24 @@ export const CandidateApplicationDetail: React.FC = () => {
 
         {/* Status banner */}
         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-2 flex-wrap">
-          <span className="text-xs text-slate-600 font-medium">Statut administratif de votre dossier :</span>
-          <StatusBadge status={myApp.status} size="lg" />
+          <div className="space-y-0.5">
+            <span className="text-xs text-slate-600 font-medium block">Statut administratif de votre dossier :</span>
+            <span className="text-[11px] text-slate-500">
+              {docSummary.providedRequiredCount} / {docSummary.totalRequired} pièce(s) fournie(s) • {docSummary.validatedRequiredCount} validée(s)
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {docSummary.hasIssues && (
+              <Link
+                to={`/candidat/corrections?appId=${myApp.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl print:hidden"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Compléter / Régulariser</span>
+              </Link>
+            )}
+            <StatusBadge status={myApp.status} size="lg" />
+          </div>
         </div>
 
         {/* Information Grid */}
@@ -177,7 +211,7 @@ export const CandidateApplicationDetail: React.FC = () => {
         {/* Documents */}
         <div className="space-y-3">
           <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">
-            Pièces justificatives versées au dossier ({myApp.documents.length})
+            Pièces justificatives du dossier ({docSummary.providedRequiredCount} / {docSummary.totalRequired} fournies)
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             {myApp.documents.map((d) => {
@@ -216,16 +250,27 @@ export const CandidateApplicationDetail: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
                     <span className="inline-flex items-center gap-1">
+                      {isCommonDocumentType(d.type) ? (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                          Commune
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold">
+                          Spécifique
+                        </span>
+                      )}
                       {d.provenance === 'recupere_administration' ? (
                         <>
                           <Building2 className="w-3 h-3 text-teal-600" />
                           <span>Administration {d.isDemoApogee ? '(Démo APOGÉE)' : ''}</span>
                         </>
-                      ) : (
+                      ) : d.status !== 'manquant' ? (
                         <>
                           <UserCheck className="w-3 h-3" />
                           <span>Fourni par le candidat</span>
                         </>
+                      ) : (
+                        <span>Non fournie</span>
                       )}
                     </span>
                     {(d.fileName || (d.fileUrl && d.fileUrl !== '#')) && (
@@ -273,7 +318,7 @@ export const CandidateApplicationDetail: React.FC = () => {
         <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-teal-600" />
-            <span>Document numérique certifié par le Centre d&apos;Études Doctorales USMBA</span>
+            <span>Document de démonstration — Centre d&apos;Études Doctorales USMBA</span>
           </div>
           <div>Généré le {new Date().toLocaleDateString('fr-FR')}</div>
         </div>

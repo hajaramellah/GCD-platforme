@@ -89,8 +89,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 text-slate-300 text-[10px]">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Plateforme Officielle GCD • Session 2026-2027
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+              Mode démonstration académique • Simulation GCD 2026-2027
             </span>
           </div>
         </div>
@@ -182,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   >
                     <Bell className="w-5 h-5" />
                     {unreadNotificationsCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                      <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                         {unreadNotificationsCount}
                       </span>
                     )}

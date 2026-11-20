@@ -29,6 +29,8 @@ export interface User {
   currentRole: UserRole;
   isActive: boolean;
   isEmailVerified: boolean;
+  googleId?: string;
+  googleLinkedAt?: string;
   avatarUrl?: string;
   createdAt: string;
   studentOriginType?: StudentOriginType;
@@ -120,6 +122,12 @@ export interface DoctoralSubject {
   correctionComment?: string;
   validationDate?: string;
   academicYear: string;
+  requiredExtraDocuments?: {
+    type: DocumentType;
+    label: string;
+    isSubjectSpecific: boolean;
+    isRequired?: boolean;
+  }[];
 }
 
 export type ApplicationStatus =
@@ -147,7 +155,9 @@ export type DocumentType =
   | 'lettre_motivation'
   | 'projet_recherche'
   | 'attestation_non_travail'
-  | 'autorisation_employeur';
+  | 'autorisation_employeur'
+  | 'lettre_recommandation'
+  | 'certification_langue';
 
 export interface ApplicationDocument {
   id: string;

@@ -1,4 +1,5 @@
 import { ApogeeLookupResult, StudentOriginType } from '../types';
+import { getInMemorySessionToken } from './authSession';
 
 export const apogeeService = {
   async getStatus(): Promise<{ configured: boolean; connectionStatus: string; message: string }> {
@@ -31,9 +32,11 @@ export const apogeeService = {
     if (params.cin) query.set('cin', params.cin);
     if (params.originType) query.set('originType', params.originType);
 
+    const token = getInMemorySessionToken();
     try {
       const resp = await fetch(`/api/apogee/student?${query.toString()}`, {
         credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!resp.ok) {
         return {
